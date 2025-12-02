@@ -19,54 +19,84 @@ class VirtualPos extends BaseConfig
 
     /**
      * NestPay Ayarları (İş Bankası, Garanti, Akbank, Yapı Kredi)
+     * Birden fazla hesap tanımlanabilir
      */
     public array $nestpay = [
-        'clientId' => '',
-        'storeKey' => '',
-        'storeType' => '3d', // 3d veya 3d_pay
-        'bank' => 'isbank', // isbank, garanti, akbank, yapikredi
-        'testUrl' => 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate',
-        'productionUrl' => 'https://www.muze.com.tr/fim/est3Dgate',
+        'defaultAccount' => 'default',
+        'accounts' => [
+            'default' => [
+                'clientId' => '',
+                'storeKey' => '',
+                'storeType' => '3d', // 3d veya 3d_pay
+                'bank' => 'isbank', // isbank, garanti, akbank, yapikredi
+                'testUrl' => 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate',
+                'productionUrl' => 'https://www.muze.com.tr/fim/est3Dgate',
+            ],
+        ],
     ];
 
     /**
      * İyzico Ayarları
+     * Birden fazla hesap tanımlanabilir
      */
     public array $iyzico = [
-        'apiKey' => '',
-        'secretKey' => '',
-        'baseUrl' => 'https://api.iyzipay.com',
+        'defaultAccount' => 'default',
+        'accounts' => [
+            'default' => [
+                'apiKey' => '',
+                'secretKey' => '',
+                'baseUrl' => 'https://api.iyzipay.com',
+            ],
+        ],
     ];
 
     /**
      * PayTR Ayarları
+     * Birden fazla hesap tanımlanabilir
      */
     public array $paytr = [
-        'merchantId' => '',
-        'merchantKey' => '',
-        'merchantSalt' => '',
-        'testUrl' => 'https://www.paytr.com/odeme',
-        'productionUrl' => 'https://www.paytr.com/odeme',
+        'defaultAccount' => 'default',
+        'accounts' => [
+            'default' => [
+                'merchantId' => '',
+                'merchantKey' => '',
+                'merchantSalt' => '',
+                'testUrl' => 'https://www.paytr.com/odeme',
+                'productionUrl' => 'https://www.paytr.com/odeme',
+            ],
+        ],
     ];
 
     /**
      * Paymes Ayarları
+     * Birden fazla hesap tanımlanabilir
      */
     public array $paymes = [
-        'apiKey' => '',
-        'secretKey' => '',
-        'merchantId' => '',
-        'baseUrl' => 'https://api.paymes.com',
+        'defaultAccount' => 'default',
+        'accounts' => [
+            'default' => [
+                'apiKey' => '',
+                'secretKey' => '',
+                'merchantId' => '',
+                'baseUrl' => 'https://api.paymes.com',
+            ],
+        ],
     ];
 
     /**
      * BKM Express Ayarları
+     * Birden fazla hesap tanımlanabilir
      */
     public array $bkm = [
-        'merchantId' => '',
-        'apiKey' => '',
-        'secretKey' => '',
-        'baseUrl' => 'https://www.bkmexpress.com.tr',
+        'defaultAccount' => 'default',
+        'accounts' => [
+            'default' => [
+                'merchantId' => '',
+                'apiKey' => '',
+                'secretKey' => '',
+                'baseUrl' => 'https://www.bkmexpress.com.tr',
+            ],
+        ],
     ];
 
     /**
@@ -74,14 +104,20 @@ class VirtualPos extends BaseConfig
      * NestPay (EST): İş Bankası, Akbank, Finansbank, Denizbank, Kuveytturk, 
      * Halkbank, Anadolubank, ING Bank, Citibank, Cardplus, Ziraat Bankası
      * Vakıfbank: Özel entegrasyon
+     * Birden fazla hesap tanımlanabilir
      */
     public array $get724 = [
-        'clientId' => '',
-        'storeKey' => '',
-        'storeType' => '3d', // 3d veya 3d_pay
-        'bank' => 'isbank', // isbank, akbank, finansbank, denizbank, kuveytturk, 
-                           // halkbank, anadolubank, ingbank, citibank, cardplus, 
-                           // ziraat, vakifbank
+        'defaultAccount' => 'default',
+        'accounts' => [
+            'default' => [
+                'clientId' => '',
+                'storeKey' => '',
+                'storeType' => '3d', // 3d veya 3d_pay
+                'bank' => 'isbank', // isbank, akbank, finansbank, denizbank, kuveytturk, 
+                                   // halkbank, anadolubank, ingbank, citibank, cardplus, 
+                                   // ziraat, vakifbank
+            ],
+        ],
     ];
 
     /**
@@ -119,36 +155,48 @@ class VirtualPos extends BaseConfig
         $this->provider = env('VIRTUALPOS_PROVIDER', $this->provider);
         $this->testMode = env('VIRTUALPOS_TEST_MODE', $this->testMode);
 
-        // NestPay
-        $this->nestpay['clientId'] = env('NESTPAY_CLIENT_ID', $this->nestpay['clientId']);
-        $this->nestpay['storeKey'] = env('NESTPAY_STORE_KEY', $this->nestpay['storeKey']);
-        $this->nestpay['storeType'] = env('NESTPAY_STORE_TYPE', $this->nestpay['storeType']);
-        $this->nestpay['bank'] = env('NESTPAY_BANK', $this->nestpay['bank']);
+        // NestPay - Default account
+        if (isset($this->nestpay['accounts']['default'])) {
+            $this->nestpay['accounts']['default']['clientId'] = env('NESTPAY_CLIENT_ID', $this->nestpay['accounts']['default']['clientId']);
+            $this->nestpay['accounts']['default']['storeKey'] = env('NESTPAY_STORE_KEY', $this->nestpay['accounts']['default']['storeKey']);
+            $this->nestpay['accounts']['default']['storeType'] = env('NESTPAY_STORE_TYPE', $this->nestpay['accounts']['default']['storeType']);
+            $this->nestpay['accounts']['default']['bank'] = env('NESTPAY_BANK', $this->nestpay['accounts']['default']['bank']);
+        }
 
-        // İyzico
-        $this->iyzico['apiKey'] = env('IYZICO_API_KEY', $this->iyzico['apiKey']);
-        $this->iyzico['secretKey'] = env('IYZICO_SECRET_KEY', $this->iyzico['secretKey']);
+        // İyzico - Default account
+        if (isset($this->iyzico['accounts']['default'])) {
+            $this->iyzico['accounts']['default']['apiKey'] = env('IYZICO_API_KEY', $this->iyzico['accounts']['default']['apiKey']);
+            $this->iyzico['accounts']['default']['secretKey'] = env('IYZICO_SECRET_KEY', $this->iyzico['accounts']['default']['secretKey']);
+        }
 
-        // PayTR
-        $this->paytr['merchantId'] = env('PAYTR_MERCHANT_ID', $this->paytr['merchantId']);
-        $this->paytr['merchantKey'] = env('PAYTR_MERCHANT_KEY', $this->paytr['merchantKey']);
-        $this->paytr['merchantSalt'] = env('PAYTR_MERCHANT_SALT', $this->paytr['merchantSalt']);
+        // PayTR - Default account
+        if (isset($this->paytr['accounts']['default'])) {
+            $this->paytr['accounts']['default']['merchantId'] = env('PAYTR_MERCHANT_ID', $this->paytr['accounts']['default']['merchantId']);
+            $this->paytr['accounts']['default']['merchantKey'] = env('PAYTR_MERCHANT_KEY', $this->paytr['accounts']['default']['merchantKey']);
+            $this->paytr['accounts']['default']['merchantSalt'] = env('PAYTR_MERCHANT_SALT', $this->paytr['accounts']['default']['merchantSalt']);
+        }
 
-        // Paymes
-        $this->paymes['apiKey'] = env('PAYMES_API_KEY', $this->paymes['apiKey']);
-        $this->paymes['secretKey'] = env('PAYMES_SECRET_KEY', $this->paymes['secretKey']);
-        $this->paymes['merchantId'] = env('PAYMES_MERCHANT_ID', $this->paymes['merchantId']);
+        // Paymes - Default account
+        if (isset($this->paymes['accounts']['default'])) {
+            $this->paymes['accounts']['default']['apiKey'] = env('PAYMES_API_KEY', $this->paymes['accounts']['default']['apiKey']);
+            $this->paymes['accounts']['default']['secretKey'] = env('PAYMES_SECRET_KEY', $this->paymes['accounts']['default']['secretKey']);
+            $this->paymes['accounts']['default']['merchantId'] = env('PAYMES_MERCHANT_ID', $this->paymes['accounts']['default']['merchantId']);
+        }
 
-        // BKM Express
-        $this->bkm['merchantId'] = env('BKM_MERCHANT_ID', $this->bkm['merchantId']);
-        $this->bkm['apiKey'] = env('BKM_API_KEY', $this->bkm['apiKey']);
-        $this->bkm['secretKey'] = env('BKM_SECRET_KEY', $this->bkm['secretKey']);
+        // BKM Express - Default account
+        if (isset($this->bkm['accounts']['default'])) {
+            $this->bkm['accounts']['default']['merchantId'] = env('BKM_MERCHANT_ID', $this->bkm['accounts']['default']['merchantId']);
+            $this->bkm['accounts']['default']['apiKey'] = env('BKM_API_KEY', $this->bkm['accounts']['default']['apiKey']);
+            $this->bkm['accounts']['default']['secretKey'] = env('BKM_SECRET_KEY', $this->bkm['accounts']['default']['secretKey']);
+        }
 
-        // Get724
-        $this->get724['clientId'] = env('GET724_CLIENT_ID', $this->get724['clientId']);
-        $this->get724['storeKey'] = env('GET724_STORE_KEY', $this->get724['storeKey']);
-        $this->get724['storeType'] = env('GET724_STORE_TYPE', $this->get724['storeType']);
-        $this->get724['bank'] = env('GET724_BANK', $this->get724['bank']);
+        // Get724 - Default account
+        if (isset($this->get724['accounts']['default'])) {
+            $this->get724['accounts']['default']['clientId'] = env('GET724_CLIENT_ID', $this->get724['accounts']['default']['clientId']);
+            $this->get724['accounts']['default']['storeKey'] = env('GET724_STORE_KEY', $this->get724['accounts']['default']['storeKey']);
+            $this->get724['accounts']['default']['storeType'] = env('GET724_STORE_TYPE', $this->get724['accounts']['default']['storeType']);
+            $this->get724['accounts']['default']['bank'] = env('GET724_BANK', $this->get724['accounts']['default']['bank']);
+        }
 
         // Callback URLs
         $this->callbackUrls['success'] = env('VIRTUALPOS_SUCCESS_URL', $this->callbackUrls['success']);

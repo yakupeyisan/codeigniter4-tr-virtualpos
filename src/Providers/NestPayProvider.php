@@ -12,7 +12,7 @@ class NestPayProvider extends VirtualPosBase
 {
     protected function validateConfiguration(): void
     {
-        $config = $this->config->nestpay;
+        $config = $this->getAccountConfig();
         
         if (empty($config['clientId'])) {
             throw new ConfigurationException('NestPay clientId yapılandırılmamış');
@@ -23,6 +23,22 @@ class NestPayProvider extends VirtualPosBase
         }
     }
 
+    /**
+     * Aktif hesap yapılandırmasını döndürür
+     */
+    protected function getAccountConfig(): array
+    {
+        $providerConfig = $this->config->nestpay;
+        $accounts = $providerConfig['accounts'] ?? [];
+        $accountId = $this->accountId ?? $providerConfig['defaultAccount'] ?? 'default';
+        
+        if (!isset($accounts[$accountId])) {
+            throw new ConfigurationException("NestPay account '{$accountId}' bulunamadı");
+        }
+        
+        return $accounts[$accountId];
+    }
+
     public function pay(PaymentRequest $request): PaymentResponse
     {
         return $this->pay3D($request);
@@ -30,7 +46,7 @@ class NestPayProvider extends VirtualPosBase
 
     public function pay3D(PaymentRequest $request): PaymentResponse
     {
-        $config = $this->config->nestpay;
+        $config = $this->getAccountConfig();
         $url = $this->isTestMode() ? $config['testUrl'] : $config['productionUrl'];
         
         $data = [
@@ -90,7 +106,7 @@ class NestPayProvider extends VirtualPosBase
 
     public function cancel(string $orderId, ?float $amount = null): PaymentResponse
     {
-        $config = $this->config->nestpay;
+        $config = $this->getAccountConfig();
         $url = $this->isTestMode() ? 
             'https://entegrasyon.asseco-see.com.tr/fim/api' : 
             'https://www.muze.com.tr/fim/api';
@@ -128,7 +144,7 @@ class NestPayProvider extends VirtualPosBase
 
     public function refund(string $orderId, float $amount, ?string $transactionId = null): PaymentResponse
     {
-        $config = $this->config->nestpay;
+        $config = $this->getAccountConfig();
         $url = $this->isTestMode() ? 
             'https://entegrasyon.asseco-see.com.tr/fim/api' : 
             'https://www.muze.com.tr/fim/api';
@@ -171,7 +187,7 @@ class NestPayProvider extends VirtualPosBase
 
     public function handleCallback(array $data): PaymentResponse
     {
-        $config = $this->config->nestpay;
+        $config = $this->getAccountConfig();
         
         // Hash doğrulama
         $hashParams = $data['HASHPARAMS'] ?? '';

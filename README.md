@@ -91,7 +91,7 @@ GET724_BANK=isbank
 use Yakupeyisan\CodeIgniter4\VirtualPos\VirtualPos;
 use Yakupeyisan\CodeIgniter4\VirtualPos\Models\PaymentRequest;
 
-// VirtualPos instance oluştur
+// VirtualPos instance oluştur (varsayılan hesap ile)
 $virtualPos = new VirtualPos();
 
 // Ödeme isteği oluştur
@@ -277,6 +277,52 @@ Desteklenen bankalar (NestPay EST):
 
 Desteklenen bankalar (Özel entegrasyon):
 - `vakifbank` - Vakıfbank
+
+## Çoklu Hesap Desteği
+
+Aynı banka için birden fazla hesap tanımlayabilir ve kullanabilirsiniz. Örneğin, Ziraat Bankası A hesabı ve Ziraat Bankası B hesabı.
+
+### Config Dosyasında Hesap Tanımlama
+
+```php
+// app/Config/VirtualPos.php
+public array $get724 = [
+    'defaultAccount' => 'ziraat_a',
+    'accounts' => [
+        'ziraat_a' => [
+            'clientId' => 'ziraat_a_client_id',
+            'storeKey' => 'ziraat_a_store_key',
+            'storeType' => '3d',
+            'bank' => 'ziraat',
+        ],
+        'ziraat_b' => [
+            'clientId' => 'ziraat_b_client_id',
+            'storeKey' => 'ziraat_b_store_key',
+            'storeType' => '3d',
+            'bank' => 'ziraat',
+        ],
+    ],
+];
+```
+
+### Belirli Bir Hesap ile Ödeme
+
+```php
+// Ziraat A hesabı ile (varsayılan)
+$virtualPos = new VirtualPos();
+$response = $virtualPos->pay3D($request);
+
+// Ziraat B hesabı ile
+$virtualPos = new VirtualPos(null, 'ziraat_b');
+$response = $virtualPos->pay3D($request);
+
+// veya withAccount metodu ile
+$virtualPos = new VirtualPos();
+$virtualPosZiraatB = $virtualPos->withAccount('ziraat_b');
+$response = $virtualPosZiraatB->pay3D($request);
+```
+
+Detaylı bilgi için [MULTI_ACCOUNT.md](MULTI_ACCOUNT.md) dosyasına bakın.
 
 ## Controller Örneği
 

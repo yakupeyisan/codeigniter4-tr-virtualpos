@@ -12,7 +12,7 @@ class Get724Provider extends VirtualPosBase
 {
     protected function validateConfiguration(): void
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         
         if (empty($config['clientId'])) {
             throw new ConfigurationException('Get724 clientId yapılandırılmamış');
@@ -27,6 +27,22 @@ class Get724Provider extends VirtualPosBase
         }
     }
 
+    /**
+     * Aktif hesap yapılandırmasını döndürür
+     */
+    protected function getAccountConfig(): array
+    {
+        $providerConfig = $this->config->get724;
+        $accounts = $providerConfig['accounts'] ?? [];
+        $accountId = $this->accountId ?? $providerConfig['defaultAccount'] ?? 'default';
+        
+        if (!isset($accounts[$accountId])) {
+            throw new ConfigurationException("Get724 account '{$accountId}' bulunamadı");
+        }
+        
+        return $accounts[$accountId];
+    }
+
     public function pay(PaymentRequest $request): PaymentResponse
     {
         return $this->pay3D($request);
@@ -34,7 +50,7 @@ class Get724Provider extends VirtualPosBase
 
     public function pay3D(PaymentRequest $request): PaymentResponse
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         
         // Banka tipine göre URL belirle
         $url = $this->getPaymentUrl($config['bank']);
@@ -94,7 +110,7 @@ class Get724Provider extends VirtualPosBase
 
     public function status(string $orderId): PaymentResponse
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         $url = $this->getApiUrl($config['bank']);
 
         $data = [
@@ -135,7 +151,7 @@ class Get724Provider extends VirtualPosBase
 
     public function cancel(string $orderId, ?float $amount = null): PaymentResponse
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         $url = $this->getApiUrl($config['bank']);
 
         $data = [
@@ -176,7 +192,7 @@ class Get724Provider extends VirtualPosBase
 
     public function refund(string $orderId, float $amount, ?string $transactionId = null): PaymentResponse
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         $url = $this->getApiUrl($config['bank']);
 
         $data = [
@@ -222,7 +238,7 @@ class Get724Provider extends VirtualPosBase
 
     public function handleCallback(array $data): PaymentResponse
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         
         // Hash doğrulama
         $hashParams = $data['HASHPARAMS'] ?? '';
@@ -283,7 +299,7 @@ class Get724Provider extends VirtualPosBase
      */
     private function getPaymentUrl(string $bank): string
     {
-        $config = $this->config->get724;
+        $config = $this->getAccountConfig();
         $isTest = $this->isTestMode();
         
         // Vakıfbank için özel URL

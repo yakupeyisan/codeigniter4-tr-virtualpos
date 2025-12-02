@@ -16,10 +16,12 @@ class VirtualPos
 {
     protected VirtualPosConfig $config;
     protected ?VirtualPosInterface $provider = null;
+    protected ?string $accountId = null;
 
-    public function __construct(?VirtualPosConfig $config = null)
+    public function __construct(?VirtualPosConfig $config = null, ?string $accountId = null)
     {
         $this->config = $config ?? config('VirtualPos');
+        $this->accountId = $accountId;
         $this->loadProvider();
     }
 
@@ -32,26 +34,34 @@ class VirtualPos
 
         switch ($providerName) {
             case 'nestpay':
-                $this->provider = new NestPayProvider($this->config);
+                $this->provider = new NestPayProvider($this->config, $this->accountId);
                 break;
             case 'iyzico':
-                $this->provider = new IyzicoProvider($this->config);
+                $this->provider = new IyzicoProvider($this->config, $this->accountId);
                 break;
             case 'paytr':
-                $this->provider = new PayTRProvider($this->config);
+                $this->provider = new PayTRProvider($this->config, $this->accountId);
                 break;
             case 'paymes':
-                $this->provider = new PaymesProvider($this->config);
+                $this->provider = new PaymesProvider($this->config, $this->accountId);
                 break;
             case 'bkm':
-                $this->provider = new BKMExpressProvider($this->config);
+                $this->provider = new BKMExpressProvider($this->config, $this->accountId);
                 break;
             case 'get724':
-                $this->provider = new Get724Provider($this->config);
+                $this->provider = new Get724Provider($this->config, $this->accountId);
                 break;
             default:
                 throw new ConfigurationException("Bilinmeyen provider: {$providerName}");
         }
+    }
+
+    /**
+     * Farklı bir hesap ile yeni bir instance oluşturur
+     */
+    public function withAccount(string $accountId): self
+    {
+        return new self($this->config, $accountId);
     }
 
     /**

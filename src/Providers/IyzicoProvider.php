@@ -12,7 +12,7 @@ class IyzicoProvider extends VirtualPosBase
 {
     protected function validateConfiguration(): void
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         
         if (empty($config['apiKey'])) {
             throw new ConfigurationException('İyzico apiKey yapılandırılmamış');
@@ -23,9 +23,25 @@ class IyzicoProvider extends VirtualPosBase
         }
     }
 
+    /**
+     * Aktif hesap yapılandırmasını döndürür
+     */
+    protected function getAccountConfig(): array
+    {
+        $providerConfig = $this->config->iyzico;
+        $accounts = $providerConfig['accounts'] ?? [];
+        $accountId = $this->accountId ?? $providerConfig['defaultAccount'] ?? 'default';
+        
+        if (!isset($accounts[$accountId])) {
+            throw new ConfigurationException("İyzico account '{$accountId}' bulunamadı");
+        }
+        
+        return $accounts[$accountId];
+    }
+
     public function pay(PaymentRequest $request): PaymentResponse
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/auth';
 
@@ -121,7 +137,7 @@ class IyzicoProvider extends VirtualPosBase
 
     public function pay3D(PaymentRequest $request): PaymentResponse
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/3dsecure/initialize';
 
@@ -218,7 +234,7 @@ class IyzicoProvider extends VirtualPosBase
 
     public function status(string $orderId): PaymentResponse
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/detail';
 
@@ -256,7 +272,7 @@ class IyzicoProvider extends VirtualPosBase
 
     public function cancel(string $orderId, ?float $amount = null): PaymentResponse
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/cancel';
 
@@ -296,7 +312,7 @@ class IyzicoProvider extends VirtualPosBase
 
     public function refund(string $orderId, float $amount, ?string $transactionId = null): PaymentResponse
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/refund';
 
@@ -333,7 +349,7 @@ class IyzicoProvider extends VirtualPosBase
 
     public function handleCallback(array $data): PaymentResponse
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/3dsecure/auth';
 
@@ -364,7 +380,7 @@ class IyzicoProvider extends VirtualPosBase
 
     public function getInstallments(float $amount): array
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';
         $url = $baseUrl . '/payment/installment';
 
@@ -392,7 +408,7 @@ class IyzicoProvider extends VirtualPosBase
      */
     private function postJson(string $url, array $data): array
     {
-        $config = $this->config->iyzico;
+        $config = $this->getAccountConfig();
         
         // Authorization header oluştur
         $randomString = $this->generateRandomString();

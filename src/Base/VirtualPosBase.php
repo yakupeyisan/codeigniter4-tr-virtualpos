@@ -14,10 +14,12 @@ abstract class VirtualPosBase implements VirtualPosInterface
     protected VirtualPos $config;
     protected CURLRequest $client;
     protected bool $testMode;
+    protected ?string $accountId = null;
 
-    public function __construct(?VirtualPos $config = null)
+    public function __construct(?VirtualPos $config = null, ?string $accountId = null)
     {
         $this->config = $config ?? config('VirtualPos');
+        $this->accountId = $accountId;
         $this->testMode = $this->config->testMode;
         $this->client = \Config\Services::curlrequest();
         $this->validateConfiguration();
@@ -126,6 +128,22 @@ abstract class VirtualPosBase implements VirtualPosInterface
             return $baseUrl . '/payment/' . $type;
         }
         return $url;
+    }
+
+    /**
+     * Account ID'yi alır
+     */
+    public function getAccountId(): ?string
+    {
+        return $this->accountId;
+    }
+
+    /**
+     * Account ID'yi ayarlar
+     */
+    public function setAccountId(?string $accountId): void
+    {
+        $this->accountId = $accountId;
     }
 }
 

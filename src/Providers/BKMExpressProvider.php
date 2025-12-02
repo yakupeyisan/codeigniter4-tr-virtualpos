@@ -11,7 +11,7 @@ class BKMExpressProvider extends VirtualPosBase
 {
     protected function validateConfiguration(): void
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         
         if (empty($config['merchantId'])) {
             throw new ConfigurationException('BKM Express merchantId yapılandırılmamış');
@@ -26,6 +26,22 @@ class BKMExpressProvider extends VirtualPosBase
         }
     }
 
+    /**
+     * Aktif hesap yapılandırmasını döndürür
+     */
+    protected function getAccountConfig(): array
+    {
+        $providerConfig = $this->config->bkm;
+        $accounts = $providerConfig['accounts'] ?? [];
+        $accountId = $this->accountId ?? $providerConfig['defaultAccount'] ?? 'default';
+        
+        if (!isset($accounts[$accountId])) {
+            throw new ConfigurationException("BKM Express account '{$accountId}' bulunamadı");
+        }
+        
+        return $accounts[$accountId];
+    }
+
     public function pay(PaymentRequest $request): PaymentResponse
     {
         return $this->pay3D($request);
@@ -33,7 +49,7 @@ class BKMExpressProvider extends VirtualPosBase
 
     public function pay3D(PaymentRequest $request): PaymentResponse
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://www.bkmexpress.com.tr';
         $url = $baseUrl . '/api/payment/create';
 
@@ -75,7 +91,7 @@ class BKMExpressProvider extends VirtualPosBase
 
     public function status(string $orderId): PaymentResponse
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://www.bkmexpress.com.tr';
         $url = $baseUrl . '/api/payment/status';
 
@@ -112,7 +128,7 @@ class BKMExpressProvider extends VirtualPosBase
 
     public function cancel(string $orderId, ?float $amount = null): PaymentResponse
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://www.bkmexpress.com.tr';
         $url = $baseUrl . '/api/payment/cancel';
 
@@ -150,7 +166,7 @@ class BKMExpressProvider extends VirtualPosBase
 
     public function refund(string $orderId, float $amount, ?string $transactionId = null): PaymentResponse
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://www.bkmexpress.com.tr';
         $url = $baseUrl . '/api/payment/refund';
 
@@ -189,7 +205,7 @@ class BKMExpressProvider extends VirtualPosBase
 
     public function handleCallback(array $data): PaymentResponse
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         
         // Hash doğrulama
         $hash = $data['hash'] ?? '';
@@ -231,7 +247,7 @@ class BKMExpressProvider extends VirtualPosBase
      */
     private function postJson(string $url, array $data): array
     {
-        $config = $this->config->bkm;
+        $config = $this->getAccountConfig();
         
         // Signature oluştur
         $timestamp = time();
