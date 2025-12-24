@@ -27,7 +27,7 @@ class VirtualPos extends BaseConfig
             'default' => [
                 'clientId' => '',
                 'storeKey' => '',
-                'storeType' => '3d', // 3d veya 3d_pay
+                'storeType' => '3D_PAY_HOSTING', // 3d veya 3d_pay
                 'bank' => 'isbank', // isbank, garanti, akbank, yapikredi
                 'testUrl' => 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate',
                 'productionUrl' => 'https://www.muze.com.tr/fim/est3Dgate',

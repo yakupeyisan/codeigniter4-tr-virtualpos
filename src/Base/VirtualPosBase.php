@@ -96,14 +96,6 @@ abstract class VirtualPosBase implements VirtualPosInterface
     }
 
     /**
-     * Tutarı formatlar (kuruş cinsinden)
-     */
-    protected function formatAmount(float $amount): string
-    {
-        return number_format($amount * 100, 0, '', '');
-    }
-
-    /**
      * IP adresini alır
      */
     protected function getClientIp(): string
