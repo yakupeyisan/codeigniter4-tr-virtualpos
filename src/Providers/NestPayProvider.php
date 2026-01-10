@@ -142,7 +142,7 @@ class NestPayProvider extends VirtualPosBase
             [$clientName, $password, $clientId, $orderId, $ipAddress],
             $xmlRequest
         );
-        log_message('debug','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
+        log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
         $requestData = "DATA=" . $xmlRequest;
         $url = $this->isTestMode() ? $config['testUrl'] : $config['productionUrl'];
         log_message('debug','NestPayProvider checkPaymentStatus url: '.$url);
@@ -226,7 +226,7 @@ class NestPayProvider extends VirtualPosBase
             log_message('error', "Nestpay CheckPayment empty response (OrderID: $orderId)");
             return PaymentResponse::failed('Banka yanıtı boş', null, $orderId);
         }
-        
+        log_message('error','NestPayProvider checkPaymentStatus result: '.$result);
         try {
             // Suppress XML warnings for invalid characters
             libxml_use_internal_errors(true);
@@ -238,7 +238,6 @@ class NestPayProvider extends VirtualPosBase
                 log_message('error', "Nestpay CheckPayment XML parse error (OrderID: $orderId): " . json_encode($errors));
                 return PaymentResponse::failed('Banka yanıtı parse edilemedi', null, $orderId);
             }
-            
             // Convert XML to array
             $responseData = json_decode(json_encode($xml), true);
             
@@ -248,13 +247,23 @@ class NestPayProvider extends VirtualPosBase
             $procReturnCode = $responseData['ProcReturnCode'] ?? '';
             $transId = $responseData['TransId'] ?? '';
             $orderStatus = $responseData['Extra']['ORDERSTATUS'] ?? '';
+            $chargeTypeCd = $responseData['Extra']['CHARGE_TYPE_CD'] ?? '';
             
             // Check if payment is successful
-            if ($response === 'Approved' && $procReturnCode === '00') {
+            //CHARGE_TYPE_CD S ise success, C ise failed
+            if ($response === 'Approved' && $procReturnCode === '00' && $chargeTypeCd === 'S') {
                 return PaymentResponse::success(
                     $transId ?: $orderId,
                     $orderId,
                     'Ödeme durumu: Onaylandı',
+                    $responseData
+                );
+            }
+            if ($response === 'Approved' && $procReturnCode === '00' && $chargeTypeCd === 'C') {
+                return PaymentResponse::failed(
+                    'Ödeme durumu: Reddedildi',
+                    $procReturnCode,
+                    $orderId,
                     $responseData
                 );
             }
