@@ -2,6 +2,7 @@
 
 namespace Yakupeyisan\CodeIgniter4\VirtualPos\Providers;
 
+use DOMDocument;
 use Yakupeyisan\CodeIgniter4\VirtualPos\Base\VirtualPosBase;
 use Yakupeyisan\CodeIgniter4\VirtualPos\Exceptions\ConfigurationException;
 use Yakupeyisan\CodeIgniter4\VirtualPos\Exceptions\PaymentException;
@@ -51,8 +52,13 @@ class Get724Provider extends VirtualPosBase
     public function pay3D(PaymentRequest $request): PaymentResponse
     {
         $config = $this->getAccountConfig();
-        
-        // Banka tipine göre URL belirle
+
+        // Vakıfbank: Common Payment API (RegisterTransaction) - eski sistem ile uyumlu
+        if ($config['bank'] === 'vakifbank') {
+            return $this->registerVakifbankTransaction($request, $config);
+        }
+
+        // NestPay/EST ve diğer bankalar: form ile 3D gateway
         $url = $this->getPaymentUrl($config['bank']);
         
         $data = [
@@ -92,11 +98,6 @@ class Get724Provider extends VirtualPosBase
             $data['BillToPostalCode'] = $request->billingZipCode ?? '';
         }
 
-        // Vakıfbank için özel parametreler
-        if ($config['bank'] === 'vakifbank') {
-            $data['storetype'] = '3d_pay_hosting';
-        }
-
         // HTML form oluştur
         $html = $this->buildForm($url, $data);
 
@@ -106,6 +107,181 @@ class Get724Provider extends VirtualPosBase
             $html,
             $data
         );
+    }
+
+    /**
+     * Vakıfbank Common Payment API - RegisterTransaction (eski sistem CreateForm ile uyumlu)
+     * https://cpweb.vakifbank.com.tr/CommonPayment/api/RegisterTransaction
+     */
+    private function registerVakifbankTransaction(PaymentRequest $request, array $config): PaymentResponse
+    {
+        $postUrl = 'https://cpweb.vakifbank.com.tr/CommonPayment/api/RegisterTransaction';
+        $transactionId = $request->orderId . '_' . time();
+        $amountCode = $this->getAmountCode($config);
+        $amount = $this->formatAmount($request->amount);
+        $installment = $request->installment ?? '';
+        if ($installment === '0' || $installment === 0) {
+            $installment = '';
+        }
+
+        $postData = [
+            'HostMerchantId' => $config['clientId'],
+            'AmountCode' => $amountCode,
+            'Amount' => $amount,
+            'MerchantPassword' => $config['storeKey'],
+            'TransactionId' => $transactionId,
+            'OrderID' => $request->orderId,
+            'InstallmentCount' => $installment,
+            'TransactionType' => 'Sale',
+            'IsSecure' => 'true',
+            'AllowNotEnrolledCard' => 'false',
+            'HostTerminalId' => $config['clientName'] ?? $config['clientId'],
+            'SuccessURL' => $this->getCallbackUrl('success'),
+            'FailURL' => $this->getCallbackUrl('fail'),
+        ];
+
+        $vakifbankHeaders = [
+            'Accept' => 'application/xml',
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language' => 'tr-TR,tr;q=0.9,en;q=0.8',
+        ];
+        try {
+            $response = $this->post($postUrl, $postData, $vakifbankHeaders, ['verify' => false]);
+            $rawBody = is_string($response) ? $response : (is_array($response) ? '' : (string) $response);
+            if ($rawBody === '' && is_array($response)) {
+                return PaymentResponse::failed('Banka yanıtı boş veya işlenemedi', null, $request->orderId);
+            }
+            $result = $this->readVakifbankRegisterResult($rawBody);
+        } catch (\Throwable $e) {
+            return PaymentResponse::failed($e->getMessage(), null, $request->orderId);
+        }
+
+        if (!empty($result['ErrorCode'])) {
+            $errorMsg = $this->getVakifbankErrorDescription($result['ErrorCode'], $rawBody ?? '');
+            if ($result['ErrorCode'] === 'INVALID_XML' && !empty($result['_rawSnippet'])) {
+                $errorMsg .= ' Yanıt: ' . $result['_rawSnippet'];
+            }
+            return PaymentResponse::failed($errorMsg, $result['ErrorCode'], $request->orderId, $result);
+        }
+
+        $redirectUrl = $result['CommonPaymentUrl'];
+        if (!empty($result['PaymentToken'])) {
+            $separator = strpos($redirectUrl, '?') !== false ? '&' : '?';
+            $redirectUrl .= $separator . 'Ptkn=' . rawurlencode($result['PaymentToken']);
+        }
+
+        $response = PaymentResponse::pending(
+            $request->orderId,
+            $redirectUrl,
+            null,
+            [
+                'inputs' => ['Ptkn' => $result['PaymentToken']],
+                'method' => 'GET',
+                'url' => $result['CommonPaymentUrl'],
+                'TransactionId' => $transactionId,
+            ]
+        );
+        $response->transactionId = $transactionId;
+        return $response;
+    }
+
+    /**
+     * Vakıfbank RegisterTransaction XML veya JSON yanıtını parse eder
+     */
+    private function readVakifbankRegisterResult(string $body): array
+    {
+        $result = [
+            'CommonPaymentUrl' => '',
+            'PaymentToken' => '',
+            'ErrorCode' => '',
+        ];
+        $snippet = function (string $s, int $len = 200) {
+            $s = preg_replace('/\s+/', ' ', trim($s));
+            return mb_substr($s, 0, $len) . (mb_strlen($s) > $len ? '…' : '');
+        };
+
+        $body = trim($body);
+        if ($body === '') {
+            $result['ErrorCode'] = 'EMPTY';
+            return $result;
+        }
+
+        // BOM ve encoding: UTF-8 BOM kaldır; UTF-16 ise UTF-8'e çevir
+        $bom8 = "\xef\xbb\xbf";
+        if (str_starts_with($body, $bom8)) {
+            $body = substr($body, strlen($bom8));
+        }
+        $bom16le = "\xff\xfe";
+        $bom16be = "\xfe\xff";
+        if (str_starts_with($body, $bom16le) || str_starts_with($body, $bom16be)) {
+            $body = mb_convert_encoding($body, 'UTF-8', 'UTF-16');
+        }
+
+        // JSON yanıt (bazı ortamlarda API JSON dönebilir)
+        $trimmed = trim($body);
+        if (str_starts_with($trimmed, '{')) {
+            $json = json_decode($body, true);
+            if (is_array($json)) {
+                $result['CommonPaymentUrl'] = $json['CommonPaymentUrl'] ?? $json['commonPaymentUrl'] ?? '';
+                $result['PaymentToken'] = $json['PaymentToken'] ?? $json['paymentToken'] ?? '';
+                $result['ErrorCode'] = (string) ($json['ErrorCode'] ?? $json['errorCode'] ?? '');
+                return $result;
+            }
+        }
+
+        // XML parse dene
+        $doc = new DOMDocument();
+        $useInternalErrors = libxml_use_internal_errors(true);
+        $loaded = @$doc->loadXML($body, LIBXML_NOERROR | LIBXML_NOCDATA);
+        libxml_use_internal_errors($useInternalErrors);
+
+        if (!$loaded) {
+            $result['ErrorCode'] = 'INVALID_XML';
+            $result['_rawSnippet'] = $snippet($body);
+            return $result;
+        }
+
+        $get = function (string $tagName) use ($doc): string {
+            $node = $doc->getElementsByTagName($tagName)->item(0);
+            return $node !== null ? trim($node->nodeValue ?? '') : '';
+        };
+        $result['CommonPaymentUrl'] = $get('CommonPaymentUrl');
+        $result['PaymentToken'] = $get('PaymentToken');
+        $result['ErrorCode'] = $get('ErrorCode');
+        return $result;
+    }
+
+    /**
+     * AmountCode için para birimi kodu (Vakıfbank: 949=TRY)
+     */
+    private function getAmountCode(array $config): string
+    {
+        $currency = $config['currency'] ?? '949';
+        if (strtoupper($currency) === 'TRY') {
+            return '949';
+        }
+        return $currency;
+    }
+
+    /**
+     * Vakıfbank hata kodları (eski sistem ErrorDescription ile uyumlu)
+     * INVALID_XML + "Request Rejected" = WAF/güvenlik duvarı isteği reddetti
+     */
+    private function getVakifbankErrorDescription(string $errorCode, string $rawBody = ''): string
+    {
+        if ($errorCode === 'INVALID_XML' && (stripos($rawBody, 'Request Rejected') !== false || stripos($rawBody, 'request was rejected') !== false)) {
+            return 'Banka güvenlik duvarı isteği reddetti. Sunucu IP adresinizin Vakıfbank tarafından tanımlı olması veya banka ile iletişime geçmeniz gerekebilir. (Request Rejected)';
+        }
+        $messages = [
+            '0000' => 'Başarılı',
+            '0003' => 'ÜYE KODU HATALI/TANIMSIZ',
+            '5001' => 'İş yeri şifresi yanlış.',
+            '5002' => 'İş yeri aktif değil.',
+            '1006' => 'Bu TransactionId ile daha önce başarılı bir işlem gerçekleştirilmiş',
+            '5037' => 'SuccessUrl alanı hatalıdır.',
+            '5038' => 'İşlem bulunamadı.',
+        ];
+        return $messages[$errorCode] ?? ('Hata: ' . $errorCode);
     }
 
     public function status(string $orderId): PaymentResponse

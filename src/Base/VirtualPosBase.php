@@ -40,25 +40,28 @@ abstract class VirtualPosBase implements VirtualPosInterface
 
     /**
      * HTTP POST isteği gönderir
+     *
+     * @param array $options Opsiyonel: 'verify' => false SSL doğrulamayı kapatır (self-signed sertifika vb.)
      */
-    protected function post(string $url, array $data, array $headers = []): array|string
+    protected function post(string $url, array $data, array $headers = [], array $options = []): array|string
     {
         try {
-            $response = $this->client->request('POST', $url, [
+            $response = $this->client->request('POST', $url, array_merge([
                 'form_params' => $data,
                 'headers' => array_merge([
                     'Content-Type' => 'application/x-www-form-urlencoded',
                 ], $headers),
                 'timeout' => $this->config->timeout,
                 'verify' => true,
-            ]);
+            ], $options));
 
             $body = $response->getBody();
-            $decoded = json_decode($body, true);
+            $bodyString = is_string($body) ? $body : (method_exists($body, 'getContents') ? $body->getContents() : (string) $body);
+            $decoded = json_decode($bodyString, true);
             
             // JSON decode başarısız olursa string olarak döndür
             if (json_last_error() !== JSON_ERROR_NONE) {
-                return $body;
+                return $bodyString;
             }
             
             return $decoded ?? [];
@@ -85,6 +88,17 @@ abstract class VirtualPosBase implements VirtualPosInterface
         } catch (\Exception $e) {
             throw new \RuntimeException('HTTP isteği başarısız: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Tutarı gateway formatına çevirir (2 ondalık basamak string)
+     *
+     * @param float|int $amount Tutar (örn. 1.00 veya 100 kuruş)
+     * @return string
+     */
+    protected function formatAmount(float|int $amount): string
+    {
+        return number_format((float) $amount, 2, '.', '');
     }
 
     /**
