@@ -232,7 +232,7 @@ class IyzicoProvider extends VirtualPosBase
         }
     }
 
-    public function status(string $orderId): PaymentResponse
+    public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         $config = $this->getAccountConfig();
         $baseUrl = $config['baseUrl'] ?? 'https://api.iyzipay.com';

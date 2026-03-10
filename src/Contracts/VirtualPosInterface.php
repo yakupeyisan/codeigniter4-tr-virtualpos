@@ -19,8 +19,10 @@ interface VirtualPosInterface
 
     /**
      * Ödeme durumunu sorgular
+     * @param string $orderId Sipariş/ödeme id
+     * @param string|null $transactionId Opsiyonel; Get724/VakıfBank mütabakat için banka işlem numarası
      */
-    public function status(string $orderId): PaymentResponse;
+    public function status(string $orderId, ?string $transactionId = null): PaymentResponse;
 
     /**
      * Ödeme iptal eder

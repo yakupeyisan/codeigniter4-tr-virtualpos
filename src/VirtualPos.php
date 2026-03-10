@@ -82,10 +82,11 @@ class VirtualPos
 
     /**
      * Ödeme durumunu sorgular
+     * @param string|null $transactionId Get724/VakıfBank mütabakat için banka TransactionId
      */
-    public function status(string $orderId)
+    public function status(string $orderId, ?string $transactionId = null)
     {
-        return $this->provider->status($orderId);
+        return $this->provider->status($orderId, $transactionId);
     }
 
     /**

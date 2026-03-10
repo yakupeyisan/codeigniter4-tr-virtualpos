@@ -284,9 +284,15 @@ class Get724Provider extends VirtualPosBase
         return $messages[$errorCode] ?? ('Hata: ' . $errorCode);
     }
 
-    public function status(string $orderId): PaymentResponse
+    public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         $config = $this->getAccountConfig();
+
+        // VakıfBank: Common Payment API VposTransaction (mütabakat) - www.get724.com.tr kullanılmaz
+        if ($config['bank'] === 'vakifbank' && $transactionId !== null && $transactionId !== '') {
+            return $this->checkVakifbankTransaction($orderId, $transactionId, $config);
+        }
+
         $url = $this->getApiUrl($config['bank']);
 
         $data = [
@@ -321,6 +327,56 @@ class Get724Provider extends VirtualPosBase
                 $response
             );
         } catch (\Exception $e) {
+            return PaymentResponse::failed($e->getMessage(), null, $orderId);
+        }
+    }
+
+    /**
+     * VakıfBank Common Payment API - VposTransaction (mütabakat / CheckPayment)
+     * https://cpweb.vakifbank.com.tr/CommonPayment/api/VposTransaction
+     * Eski sistem Get724::CheckPayment ile uyumlu; www.get724.com.tr kullanılmaz.
+     */
+    private function checkVakifbankTransaction(string $orderId, string $transactionId, array $config): PaymentResponse
+    {
+        $postUrl = 'https://cpweb.vakifbank.com.tr/CommonPayment/api/VposTransaction';
+        $postData = [
+            'HostMerchantId' => $config['clientId'],
+            'Password' => $config['storeKey'],
+            'TransactionId' => $transactionId,
+        ];
+
+        $headers = [
+            'Accept' => 'application/xml',
+        ];
+
+        try {
+            $response = $this->post($postUrl, $postData, $headers, ['verify' => false]);
+            $rawBody = is_string($response) ? $response : (is_array($response) ? '' : (string) $response);
+            if (is_array($response)) {
+                $rawBody = '';
+            }
+            if ($rawBody === '') {
+                return PaymentResponse::failed('Banka yanıtı boş', null, $orderId);
+            }
+
+            $xml = @simplexml_load_string($rawBody);
+            if ($xml === false) {
+                return PaymentResponse::failed('Banka yanıtı işlenemedi', null, $orderId);
+            }
+
+            $rc = (string) ($xml->Rc ?? $xml->rc ?? '');
+            if ($rc === '0000') {
+                return PaymentResponse::success(
+                    $transactionId,
+                    $orderId,
+                    'Ödeme başarılı',
+                    json_decode(json_encode($xml), true) ?: []
+                );
+            }
+
+            $errMsg = $this->getVakifbankErrorDescription($rc, $rawBody);
+            return PaymentResponse::failed($errMsg, $rc, $orderId, json_decode(json_encode($xml), true) ?: []);
+        } catch (\Throwable $e) {
             return PaymentResponse::failed($e->getMessage(), null, $orderId);
         }
     }

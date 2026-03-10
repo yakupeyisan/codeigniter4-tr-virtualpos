@@ -101,7 +101,7 @@ class NestPayProvider extends VirtualPosBase
         return base64_encode(pack('H*', $calculatedHashValue));
     }
 
-    public function status(string $orderId): PaymentResponse
+    public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         $config = $this->getAccountConfig();
             $bank = strtolower($config['bank'] ?? 'isbank');

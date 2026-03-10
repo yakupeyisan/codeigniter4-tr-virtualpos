@@ -120,7 +120,7 @@ class PayTRProvider extends VirtualPosBase
         }
     }
 
-    public function status(string $orderId): PaymentResponse
+    public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         // PayTR'de status sorgulama için özel endpoint gerekebilir
         throw new \RuntimeException('Status sorgulama bu provider için desteklenmiyor');
