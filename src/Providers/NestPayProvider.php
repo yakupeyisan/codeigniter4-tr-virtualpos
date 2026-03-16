@@ -127,9 +127,10 @@ class NestPayProvider extends VirtualPosBase
     private function checkPaymentStatus(string $orderId, array $config): PaymentResponse
     {
         log_message('debug','NestPayProvider checkPaymentStatus: '.json_encode($config));
-        // Get credentials from config
+        // Get credentials from config (compatible with old Nestpay::CheckPayment)
         $clientName = $config['clientName'] ?? '';
-        $password = $config['storeKey'] ?? '';
+        // Use dedicated password field if provided, otherwise fall back to storeKey
+        $password = $config['password'] ?? ($config['storeKey'] ?? '');
         $clientId = $config['clientId'] ?? '';
         $ipAddress = $this->getClientIp();
         
@@ -259,7 +260,7 @@ class NestPayProvider extends VirtualPosBase
             $responseData = json_decode(json_encode($xml), true);
             
             // Parse response to determine payment status
-            // Ziraat Bankası response format: CC5Response -> Response, ProcReturnCode, etc.
+            // Nestpay / Halkbank response format: CC5Response -> Response, ProcReturnCode, etc.
             $response = $responseData['Response'] ?? '';
             $procReturnCode = $responseData['ProcReturnCode'] ?? '';
             $transId = $responseData['TransId'] ?? '';
@@ -267,8 +268,9 @@ class NestPayProvider extends VirtualPosBase
             $chargeTypeCd = $responseData['Extra']['CHARGE_TYPE_CD'] ?? '';
             
             // Check if payment is successful
-            //CHARGE_TYPE_CD S ise success, C ise failed
-            if ($response === 'Approved' && $procReturnCode === '00' && $chargeTypeCd === 'S') {
+            // Old system: only Response == Approved AND ProcReturnCode == 00 kontrol ediliyordu.
+            // CHARGE_TYPE_CD varsa S => başarılı, C => başarısız olarak ele al.
+            if ($response === 'Approved' && $procReturnCode === '00' && ($chargeTypeCd === '' || $chargeTypeCd === 'S')) {
                 return PaymentResponse::success(
                     $transId ?: $orderId,
                     $orderId,
