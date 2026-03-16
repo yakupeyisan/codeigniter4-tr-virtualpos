@@ -104,8 +104,6 @@ class NestPayProvider extends VirtualPosBase
     public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         $config = $this->getAccountConfig();
-            $bank = strtolower($config['bank'] ?? 'isbank');
-            
         return $this->checkPaymentStatus($orderId, $config);
     }
 
@@ -144,7 +142,17 @@ class NestPayProvider extends VirtualPosBase
         );
         log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
         $requestData = "DATA=" . $xmlRequest;
-        $url = $this->isTestMode() ? $config['testUrl'] : $config['productionUrl'];
+
+        // Select status / reconciliation URL based on bank (Ziraat / Halkbank Nestpay)
+        $bank = strtolower($config['bank'] ?? 'isbank');
+        if ($bank === 'halkbank') {
+            // Old system Halkbank status URL
+            $url = 'https://sanalpos.halkbank.com.tr/fim/api';
+        } else {
+            // Default to Ziraat Nestpay status URL (old system compatible)
+            $url = 'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer';
+        }
+
         log_message('debug','NestPayProvider checkPaymentStatus url: '.$url);
         // Use optimized cURL with better timeout settings
         $ch = curl_init();
@@ -381,9 +389,17 @@ class NestPayProvider extends VirtualPosBase
             return PaymentResponse::failed('Geçersiz callback verisi', null, $data['oid'] ?? null);
         }
 
-        // Hash doğrulama
-        $hashData = $hashParamsVal . $config['storeKey'];
-        $calculatedHash = base64_encode(pack('H*', sha1($hashData)));
+        // Hash doğrulama (Nestpay ver3 algoritması: HASHPARAMSVAL + escaped storeKey, SHA512)
+        $storeKey = $config['storeKey'] ?? '';
+        if ($storeKey === '') {
+            return PaymentResponse::failed('StoreKey yapılandırılmamış', null, $data['oid'] ?? null);
+        }
+
+        // Escape storeKey just like in request hash creation
+        $escapedStoreKey = str_replace("|", "\\|", str_replace("\\", "\\\\", $storeKey));
+        $hashData = $hashParamsVal . $escapedStoreKey;
+        $calculatedHashValue = hash('sha512', $hashData);
+        $calculatedHash = base64_encode(pack('H*', $calculatedHashValue));
         
         if ($calculatedHash !== $hash) {
             return PaymentResponse::failed('Hash doğrulama başarısız', null, $data['oid'] ?? null);
