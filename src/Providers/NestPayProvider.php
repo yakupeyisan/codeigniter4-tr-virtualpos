@@ -49,9 +49,18 @@ class NestPayProvider extends VirtualPosBase
         $config = $this->getAccountConfig();
         $url = $this->isTestMode() ? $config['testUrl'] : $config['productionUrl'];
         log_message('debug','PaymentConfig: '.json_encode($config));
+        // Determine store type (usage type) based on bank / config
+        $bank = strtolower($config['bank'] ?? '');
+        if ($bank === 'halkbank') {
+            // Halkbank Nestpay genelde 3d_pay_hosting kullanıyor
+            $storeType = '3d_pay_hosting';
+        } else {
+            // Fallback to configured storeType or classic 3d
+            $storeType = $config['storeType'] ?? '3d';
+        }
         $data = [
             'clientid' => $config['clientId'],
-            'storetype' => $config['storeType'] ?? '3d',
+            'storetype' => $storeType,
             'amount' => $request->amount,
             'oid' => $request->orderId,
             'okUrl' => $this->getCallbackUrl('success'),
