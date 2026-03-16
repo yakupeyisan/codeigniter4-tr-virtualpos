@@ -113,6 +113,11 @@ class NestPayProvider extends VirtualPosBase
     public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         $config = $this->getAccountConfig();
+        log_message('error', 'NestPayProvider::status called', [
+            'orderId' => $orderId,
+            'transactionId' => $transactionId,
+            'config' => $config,
+        ]);
         return $this->checkPaymentStatus($orderId, $config);
     }
 
@@ -163,7 +168,7 @@ class NestPayProvider extends VirtualPosBase
             $url = 'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer';
         }
 
-        log_message('debug','NestPayProvider checkPaymentStatus url: '.$url);
+        log_message('error','NestPayProvider checkPaymentStatus url: '.$url);
         // Use optimized cURL with better timeout settings
         $ch = curl_init();
         
@@ -224,6 +229,14 @@ class NestPayProvider extends VirtualPosBase
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         
+        // Log raw HTTP response for reconciliation debugging
+        log_message('error', 'NestPayProvider checkPaymentStatus raw HTTP response', [
+            'orderId' => $orderId,
+            'httpCode' => $httpCode,
+            'executionTime' => round($executionTime, 2),
+            'rawBody' => $result,
+        ]);
+        
         // Log slow requests (more than 5 seconds)
         if ($executionTime > 5) {
             log_message('warning', "Nestpay CheckPayment slow response (OrderID: $orderId): " . round($executionTime, 2) . "s | HTTP Code: $httpCode");
@@ -258,6 +271,10 @@ class NestPayProvider extends VirtualPosBase
             }
             // Convert XML to array
             $responseData = json_decode(json_encode($xml), true);
+            log_message('error', 'NestPayProvider checkPaymentStatus parsed responseData', [
+                'orderId' => $orderId,
+                'responseData' => $responseData,
+            ]);
             
             // Parse response to determine payment status
             // Nestpay / Halkbank response format: CC5Response -> Response, ProcReturnCode, etc.
