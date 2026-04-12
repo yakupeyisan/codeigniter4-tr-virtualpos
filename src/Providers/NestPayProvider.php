@@ -1,4 +1,4 @@
-<?php
+?php
 
 namespace Yakupeyisan\CodeIgniter4\VirtualPos\Providers;
 
@@ -15,16 +15,16 @@ class NestPayProvider extends VirtualPosBase
         $config = $this->getAccountConfig();
         
         if (empty($config['clientId'])) {
-            throw new ConfigurationException('NestPay clientId yapılandırılmamış');
+            throw new ConfigurationException('NestPay clientId yapÃ„Â±landÃ„Â±rÃ„Â±lmamÃ„Â±Ã…Å¸');
         }
         
         if (empty($config['storeKey'])) {
-            throw new ConfigurationException('NestPay storeKey yapılandırılmamış');
+            throw new ConfigurationException('NestPay storeKey yapÃ„Â±landÃ„Â±rÃ„Â±lmamÃ„Â±Ã…Å¸');
         }
     }
 
     /**
-     * Aktif hesap yapılandırmasını döndürür
+     * Aktif hesap yapÃ„Â±landÃ„Â±rmasÃ„Â±nÃ„Â± dÃƒÂ¶ndÃƒÂ¼rÃƒÂ¼r
      */
     protected function getAccountConfig(): array
     {
@@ -33,7 +33,7 @@ class NestPayProvider extends VirtualPosBase
         $accountId = $this->accountId ?? $providerConfig['defaultAccount'] ?? 'default';
         
         if (!isset($accounts[$accountId])) {
-            throw new ConfigurationException("NestPay account '{$accountId}' bulunamadı");
+            throw new ConfigurationException("NestPay account '{$accountId}' bulunamadÃ„Â±");
         }
         
         return $accounts[$accountId];
@@ -51,8 +51,8 @@ class NestPayProvider extends VirtualPosBase
         log_message('debug','PaymentConfig: '.json_encode($config));
         // Determine store type (usage type) based on bank / config
         $bank = strtolower($config['bank'] ?? '');
-        if ($bank === 'halkbank') {
-            // Halkbank Nestpay genelde 3d_pay_hosting kullanıyor
+        if ($bank === 'halkbank' || $bank === 'ziraat') {
+            // Halkbank / Ziraat NestPay: hosting odeme; 3d_pay_hosting
             $storeType = '3d_pay_hosting';
         } else {
             // Fallback to configured storeType or classic 3d
@@ -61,7 +61,7 @@ class NestPayProvider extends VirtualPosBase
         $data = [
             'clientid' => $config['clientId'],
             'storetype' => $storeType,
-            'amount' => $request->amount,
+            'amount' => number_format((float) $request->amount, 2, '.', ''),
             'oid' => $request->orderId,
             'okUrl' => $this->getCallbackUrl('success'),
             'failUrl' => $this->getCallbackUrl('fail'),
@@ -78,7 +78,7 @@ class NestPayProvider extends VirtualPosBase
         $hash = $this->createHash($data, $config['storeKey']);
         $data['hash'] = $hash;
 
-        // HTML form oluştur
+        // HTML form oluÃ…Å¸tur
         $html = $this->buildForm($url, $data);
 
         return PaymentResponse::pending(
@@ -122,11 +122,11 @@ class NestPayProvider extends VirtualPosBase
     }
 
     /**
-     * Ziraat Bankası için ödeme durumu sorgulama (mütabakat)
+     * Ziraat BankasÃ„Â± iÃƒÂ§in ÃƒÂ¶deme durumu sorgulama (mÃƒÂ¼tabakat)
      * Optimized with better timeout handling and error checking
      * 
-     * @param string $orderId Sipariş ID
-     * @param array $config Hesap yapılandırması
+     * @param string $orderId SipariÃ…Å¸ ID
+     * @param array $config Hesap yapÃ„Â±landÃ„Â±rmasÃ„Â±
      * @return PaymentResponse
      */
     private function checkPaymentStatus(string $orderId, array $config): PaymentResponse
@@ -219,7 +219,7 @@ class NestPayProvider extends VirtualPosBase
             log_message('error', "Nestpay CheckPayment cURL Error (OrderID: $orderId): [$curlErrno] $curlError | Execution time: " . round($executionTime, 2) . "s");
             
             return PaymentResponse::failed(
-                "Banka API hatası: $curlError",
+                "Banka API hatasÃ„Â±: $curlError",
                 (string)$curlErrno,
                 $orderId
             );
@@ -246,7 +246,7 @@ class NestPayProvider extends VirtualPosBase
         if ($httpCode !== 200) {
             log_message('error', "Nestpay CheckPayment HTTP Error (OrderID: $orderId): HTTP $httpCode | Execution time: " . round($executionTime, 2) . "s");
             return PaymentResponse::failed(
-                "Banka API HTTP hatası: $httpCode",
+                "Banka API HTTP hatasÃ„Â±: $httpCode",
                 (string)$httpCode,
                 $orderId
             );
@@ -255,7 +255,7 @@ class NestPayProvider extends VirtualPosBase
         // Parse XML response
         if (empty($result)) {
             log_message('error', "Nestpay CheckPayment empty response (OrderID: $orderId)");
-            return PaymentResponse::failed('Banka yanıtı boş', null, $orderId);
+            return PaymentResponse::failed('Banka yanÃ„Â±tÃ„Â± boÃ…Å¸', null, $orderId);
         }
         log_message('error','NestPayProvider checkPaymentStatus result: '.$result);
         try {
@@ -267,7 +267,7 @@ class NestPayProvider extends VirtualPosBase
                 $errors = libxml_get_errors();
                 libxml_clear_errors();
                 log_message('error', "Nestpay CheckPayment XML parse error (OrderID: $orderId): " . json_encode($errors));
-                return PaymentResponse::failed('Banka yanıtı parse edilemedi', null, $orderId);
+                return PaymentResponse::failed('Banka yanÃ„Â±tÃ„Â± parse edilemedi', null, $orderId);
             }
             // Convert XML to array
             $responseData = json_decode(json_encode($xml), true);
@@ -286,18 +286,18 @@ class NestPayProvider extends VirtualPosBase
             
             // Check if payment is successful
             // Old system: only Response == Approved AND ProcReturnCode == 00 kontrol ediliyordu.
-            // CHARGE_TYPE_CD varsa S => başarılı, C => başarısız olarak ele al.
+            // CHARGE_TYPE_CD varsa S => baÃ…Å¸arÃ„Â±lÃ„Â±, C => baÃ…Å¸arÃ„Â±sÃ„Â±z olarak ele al.
             if ($response === 'Approved' && $procReturnCode === '00' && ($chargeTypeCd === '' || $chargeTypeCd === 'S')) {
                 return PaymentResponse::success(
                     $transId ?: $orderId,
                     $orderId,
-                    'Ödeme durumu: Onaylandı',
+                    'Ãƒâ€“deme durumu: OnaylandÃ„Â±',
                     $responseData
                 );
             }
             if ($response === 'Approved' && $procReturnCode === '00' && $chargeTypeCd === 'C') {
                 return PaymentResponse::failed(
-                    'Ödeme durumu: Reddedildi',
+                    'Ãƒâ€“deme durumu: Reddedildi',
                     $procReturnCode,
                     $orderId,
                     $responseData
@@ -305,7 +305,7 @@ class NestPayProvider extends VirtualPosBase
             }
             
             // Payment failed or pending
-            $errorMsg = $responseData['ErrMsg'] ?? ($orderStatus === 'SOR' ? 'Ödeme sorgulama yapıldı' : 'Ödeme durumu bilinmiyor');
+            $errorMsg = $responseData['ErrMsg'] ?? ($orderStatus === 'SOR' ? 'Ãƒâ€“deme sorgulama yapÃ„Â±ldÃ„Â±' : 'Ãƒâ€“deme durumu bilinmiyor');
             return PaymentResponse::failed(
                 $errorMsg,
                 $procReturnCode,
@@ -316,7 +316,7 @@ class NestPayProvider extends VirtualPosBase
         } catch (\Exception $e) {
             log_message('error', "Nestpay CheckPayment exception (OrderID: $orderId): " . $e->getMessage());
             return PaymentResponse::failed(
-                'Yanıt işlenirken hata oluştu: ' . $e->getMessage(),
+                'YanÃ„Â±t iÃ…Å¸lenirken hata oluÃ…Å¸tu: ' . $e->getMessage(),
                 null,
                 $orderId
             );
@@ -345,13 +345,13 @@ class NestPayProvider extends VirtualPosBase
                 return PaymentResponse::success(
                     $response['TransId'] ?? $orderId,
                     $orderId,
-                    'İptal işlemi başarılı',
+                    'Ã„Â°ptal iÃ…Å¸lemi baÃ…Å¸arÃ„Â±lÃ„Â±',
                     $response
                 );
             }
 
             return PaymentResponse::failed(
-                $response['ErrMsg'] ?? 'İptal işlemi başarısız',
+                $response['ErrMsg'] ?? 'Ã„Â°ptal iÃ…Å¸lemi baÃ…Å¸arÃ„Â±sÃ„Â±z',
                 $response['ProcReturnCode'] ?? null,
                 $orderId,
                 $response
@@ -388,13 +388,13 @@ class NestPayProvider extends VirtualPosBase
                 return PaymentResponse::success(
                     $response['TransId'] ?? $orderId,
                     $orderId,
-                    'İade işlemi başarılı',
+                    'Ã„Â°ade iÃ…Å¸lemi baÃ…Å¸arÃ„Â±lÃ„Â±',
                     $response
                 );
             }
 
             return PaymentResponse::failed(
-                $response['ErrMsg'] ?? 'İade işlemi başarısız',
+                $response['ErrMsg'] ?? 'Ã„Â°ade iÃ…Å¸lemi baÃ…Å¸arÃ„Â±sÃ„Â±z',
                 $response['ProcReturnCode'] ?? null,
                 $orderId,
                 $response
@@ -408,19 +408,19 @@ class NestPayProvider extends VirtualPosBase
     {
         $config = $this->getAccountConfig();
         
-        // Hash doğrulama
+        // Hash doÃ„Å¸rulama
         $hashParams = $data['HASHPARAMS'] ?? '';
         $hashParamsVal = $data['HASHPARAMSVAL'] ?? '';
         $hash = $data['HASH'] ?? '';
         
         if (empty($hashParams) || empty($hashParamsVal) || empty($hash)) {
-            return PaymentResponse::failed('Geçersiz callback verisi', null, $data['oid'] ?? null);
+            return PaymentResponse::failed('GeÃƒÂ§ersiz callback verisi', null, $data['oid'] ?? null);
         }
 
-        // Hash doğrulama (Nestpay ver3 algoritması: HASHPARAMSVAL + escaped storeKey, SHA512)
+        // Hash doÃ„Å¸rulama (Nestpay ver3 algoritmasÃ„Â±: HASHPARAMSVAL + escaped storeKey, SHA512)
         $storeKey = $config['storeKey'] ?? '';
         if ($storeKey === '') {
-            return PaymentResponse::failed('StoreKey yapılandırılmamış', null, $data['oid'] ?? null);
+            return PaymentResponse::failed('StoreKey yapÃ„Â±landÃ„Â±rÃ„Â±lmamÃ„Â±Ã…Å¸', null, $data['oid'] ?? null);
         }
 
         // Escape storeKey just like in request hash creation
@@ -430,7 +430,7 @@ class NestPayProvider extends VirtualPosBase
         $calculatedHash = base64_encode(pack('H*', $calculatedHashValue));
         
         if ($calculatedHash !== $hash) {
-            return PaymentResponse::failed('Hash doğrulama başarısız', null, $data['oid'] ?? null);
+            return PaymentResponse::failed('Hash doÃ„Å¸rulama baÃ…Å¸arÃ„Â±sÃ„Â±z', null, $data['oid'] ?? null);
         }
 
         $orderId = $data['oid'] ?? '';
@@ -439,22 +439,22 @@ class NestPayProvider extends VirtualPosBase
         $transId = $data['TransId'] ?? '';
         $mdStatus = $data['mdStatus'] ?? '';
 
-        // 3D Secure doğrulama
+        // 3D Secure doÃ„Å¸rulama
         if ($mdStatus !== '1' && $mdStatus !== '2' && $mdStatus !== '3' && $mdStatus !== '4') {
-            return PaymentResponse::failed('3D Secure doğrulama başarısız', $mdStatus, $orderId, $data);
+            return PaymentResponse::failed('3D Secure doÃ„Å¸rulama baÃ…Å¸arÃ„Â±sÃ„Â±z', $mdStatus, $orderId, $data);
         }
 
-        // Ödeme durumu
+        // Ãƒâ€“deme durumu
         if ($response === 'Approved' && $procReturnCode === '00') {
             return PaymentResponse::success(
                 $transId,
                 $orderId,
-                'Ödeme başarılı',
+                'Ãƒâ€“deme baÃ…Å¸arÃ„Â±lÃ„Â±',
                 $data
             );
         }
 
-        $errorMsg = $data['ErrMsg'] ?? 'Ödeme başarısız';
+        $errorMsg = $data['ErrMsg'] ?? 'Ãƒâ€“deme baÃ…Å¸arÃ„Â±sÃ„Â±z';
         return PaymentResponse::failed(
             $errorMsg,
             $procReturnCode,
@@ -465,13 +465,13 @@ class NestPayProvider extends VirtualPosBase
 
     public function getInstallments(float $amount): array
     {
-        // NestPay taksit bilgileri genellikle banka tarafından sağlanır
-        // Bu metod bankaya özel implementasyon gerektirebilir
+        // NestPay taksit bilgileri genellikle banka tarafÃ„Â±ndan saÃ„Å¸lanÃ„Â±r
+        // Bu metod bankaya ÃƒÂ¶zel implementasyon gerektirebilir
         return [];
     }
 
     /**
-     * HTML form oluşturur
+     * HTML form oluÃ…Å¸turur
      */
     private function buildForm(string $url, array $data): string
     {
