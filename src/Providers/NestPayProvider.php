@@ -1,4 +1,4 @@
-?php
+<?php
 
 namespace Yakupeyisan\CodeIgniter4\VirtualPos\Providers;
 
