@@ -95,7 +95,7 @@ class IyzicoProvider extends VirtualPosBase
         if (!empty($request->items)) {
             foreach ($request->items as $item) {
                 $data['basketItems'][] = [
-                    'id' => $item['code'] ?? uniqid(),
+                    'id' => $item['code'] ?? bin2hex(random_bytes(8)),
                     'name' => $item['name'],
                     'category1' => 'Genel',
                     'itemType' => 'PHYSICAL',
@@ -192,7 +192,7 @@ class IyzicoProvider extends VirtualPosBase
         if (!empty($request->items)) {
             foreach ($request->items as $item) {
                 $data['basketItems'][] = [
-                    'id' => $item['code'] ?? uniqid(),
+                    'id' => $item['code'] ?? bin2hex(random_bytes(8)),
                     'name' => $item['name'],
                     'category1' => 'Genel',
                     'itemType' => 'PHYSICAL',
@@ -439,7 +439,8 @@ class IyzicoProvider extends VirtualPosBase
      */
     private function generateIyzicoSignature(string $apiKey, string $secretKey, string $randomString, string $requestString): string
     {
-        $hash = base64_encode(sha1($randomString . $secretKey . $requestString, true));
+        // İyzico API imzası SHA-1 ile tanımlıdır (sağlayıcı dokümantasyonu).
+        $hash = base64_encode(hash('sha1', $randomString . $secretKey . $requestString, true));
         return $hash;
     }
 

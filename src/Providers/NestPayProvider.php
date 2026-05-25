@@ -168,66 +168,53 @@ class NestPayProvider extends VirtualPosBase
             $url = 'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer';
         }
 
-        log_message('error','NestPayProvider checkPaymentStatus url: '.$url);
-        // Use optimized cURL with better timeout settings
-        $ch = curl_init();
-        
-        // Basic cURL options
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $requestData);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        
-        // Optimized timeout settings
-        // CONNECTTIMEOUT: DNS lookup + connection time (10 seconds max)
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        // TIMEOUT: Total request time including data transfer (30 seconds max)
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        
-        // Performance optimizations
-        curl_setopt($ch, CURLOPT_FRESH_CONNECT, false); // Reuse connections
-        curl_setopt($ch, CURLOPT_FORBID_REUSE, false); // Allow connection reuse
-        curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1); // Use HTTP/1.1
-        curl_setopt($ch, CURLOPT_TCP_NODELAY, true); // Disable Nagle algorithm for faster response
-        
-        // Headers for better performance
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/x-www-form-urlencoded',
-            'Connection: keep-alive',
-            'Cache-Control: no-cache'
-        ]);
-        
-        // DNS caching (if available)
-        if (defined('CURLOPT_DNS_CACHE_TIMEOUT')) {
-            curl_setopt($ch, CURLOPT_DNS_CACHE_TIMEOUT, 300); // Cache DNS for 5 minutes
+        $allowedUrls = [
+            'https://sanalpos.halkbank.com.tr/fim/api',
+            'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer',
+        ];
+        if (! in_array($url, $allowedUrls, true)) {
+            return PaymentResponse::failed('Geçersiz banka API adresi', null, $orderId);
         }
-        
-        // Execute request
+
+        log_message('error', 'NestPayProvider checkPaymentStatus url: ' . $url);
+
+        $verifySsl = true;
+        $caBundle = env('CURL_CA_BUNDLE', '');
+        if ($caBundle !== '' && is_file($caBundle)) {
+            $verifySsl = $caBundle;
+        }
+
         $startTime = microtime(true);
-        $result = curl_exec($ch);
-        $executionTime = microtime(true) - $startTime;
-        
-        // Check for cURL errors
-        if ($result === false) {
-            $curlError = curl_error($ch);
-            $curlErrno = curl_errno($ch);
-            curl_close($ch);
-            
-            // Log error details
-            log_message('error', "Nestpay CheckPayment cURL Error (OrderID: $orderId): [$curlErrno] $curlError | Execution time: " . round($executionTime, 2) . "s");
-            
+        try {
+            $httpResponse = \Config\Services::curlrequest()->post($url, [
+                'body' => $requestData,
+                'headers' => [
+                    'Content-Type' => 'application/x-www-form-urlencoded',
+                    'Connection' => 'keep-alive',
+                    'Cache-Control' => 'no-cache',
+                ],
+                'http_errors' => false,
+                'verify' => $verifySsl,
+                'timeout' => 30,
+                'connect_timeout' => 10,
+            ]);
+            $result = (string) $httpResponse->getBody();
+            $httpCode = $httpResponse->getStatusCode();
+        } catch (\Throwable $e) {
+            $executionTime = microtime(true) - $startTime;
+            log_message(
+                'error',
+                'Nestpay CheckPayment HTTP Error (OrderID: ' . $orderId . '): '
+                . $e->getMessage() . ' | Execution time: ' . round($executionTime, 2) . 's'
+            );
+
             return PaymentResponse::failed(
-                "Banka API hatasÃ„Â±: $curlError",
-                (string)$curlErrno,
+                'Banka API hatası: ' . $e->getMessage(),
+                null,
                 $orderId
             );
         }
-        
-        // Get HTTP response code
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $executionTime = microtime(true) - $startTime;
         
         // Log raw HTTP response for reconciliation debugging
         log_message('error', 'NestPayProvider checkPaymentStatus raw HTTP response', [

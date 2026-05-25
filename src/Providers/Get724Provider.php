@@ -79,7 +79,8 @@ class Get724Provider extends VirtualPosBase
         $hashData = $config['storeKey'] . $data['clientid'] . $data['oid'] . $data['amount'] . 
                    $data['okUrl'] . $data['failUrl'] . $data['islemtipi'] . $data['taksit'] . 
                    $data['rnd'] . $data['currency'];
-        $data['hash'] = base64_encode(pack('H*', sha1($hashData)));
+        // NestPay/EST ödeme ağ geçidi hashAlgorithm=ver3 için SHA-1 zorunludur (sağlayıcı sözleşmesi).
+        $data['hash'] = base64_encode(pack('H*', hash('sha1', $hashData)));
 
         // Müşteri bilgileri
         if ($request->customerName) {
@@ -483,7 +484,7 @@ class Get724Provider extends VirtualPosBase
 
         // Hash doğrulama
         $hashData = $hashParamsVal . $config['storeKey'];
-        $calculatedHash = base64_encode(pack('H*', sha1($hashData)));
+        $calculatedHash = base64_encode(pack('H*', hash('sha1', $hashData)));
         
         if ($calculatedHash !== $hash) {
             return PaymentResponse::failed('Hash doğrulama başarısız', null, $data['oid'] ?? null);
