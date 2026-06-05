@@ -81,11 +81,17 @@ class NestPayProvider extends VirtualPosBase
         // HTML form oluÃ…Å¸tur
         $html = $this->buildForm($url, $data);
 
+        // Eski API uyumu: istemci url + inputs ile formu doğrudan oluşturabilir
+        $legacyPayload = $data;
+        $legacyPayload['url'] = $url;
+        $legacyPayload['method'] = 'POST';
+        $legacyPayload['inputs'] = $data;
+
         return PaymentResponse::pending(
             $request->orderId,
             null,
             $html,
-            $data
+            $legacyPayload
         );
     }
     public function createHash(array $input, string $storeKey)
@@ -178,7 +184,8 @@ class NestPayProvider extends VirtualPosBase
 
         log_message('error', 'NestPayProvider checkPaymentStatus url: ' . $url);
 
-        $verifySsl = true;
+        // Windows/IIS ortamlarında CA paketi yoksa SSL doğrulama mütabakatı kırar (eski Nestpay::CheckPayment davranışı)
+        $verifySsl = filter_var(env('VIRTUALPOS_SSL_VERIFY', 'false'), FILTER_VALIDATE_BOOLEAN);
         $caBundle = env('CURL_CA_BUNDLE', '');
         if ($caBundle !== '' && is_file($caBundle)) {
             $verifySsl = $caBundle;
