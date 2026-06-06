@@ -68,7 +68,7 @@ class NestPayProvider extends VirtualPosBase
             'islemtipi' => 'Auth',
             'taksit' => $request->installment ?? '',
             'callbackUrl' => $this->getCallbackUrl('callback'),
-            'currency' => $request->currency ?? '949',
+            'currency' => $this->normalizeCurrency($request->currency ?? ($config['currency'] ?? '949')),
             'rnd' => microtime(),
             "lang" => "tr",
             "hashalgorithm" => "ver3",
@@ -467,6 +467,16 @@ class NestPayProvider extends VirtualPosBase
     /**
      * HTML form oluÃ…Å¸turur
      */
+    private function normalizeCurrency(string $currency): string
+    {
+        $currency = trim($currency);
+        if ($currency === '' || strtoupper($currency) === 'TRY' || strtoupper($currency) === 'TL') {
+            return '949';
+        }
+
+        return $currency;
+    }
+
     private function buildForm(string $url, array $data): string
     {
         $form = '<form id="nestpay_form" method="post" action="' . htmlspecialchars($url) . '">';
