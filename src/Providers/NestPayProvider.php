@@ -119,11 +119,11 @@ class NestPayProvider extends VirtualPosBase
     public function status(string $orderId, ?string $transactionId = null): PaymentResponse
     {
         $config = $this->getAccountConfig();
-        log_message('error', 'NestPayProvider::status called', [
-            'orderId' => $orderId,
-            'transactionId' => $transactionId,
-            'config' => $config,
-        ]);
+        // log_message('error', 'NestPayProvider::status called', [
+        //     'orderId' => $orderId,
+        //     'transactionId' => $transactionId,
+        //     'config' => $config,
+        // ]);
         return $this->checkPaymentStatus($orderId, $config);
     }
 
@@ -161,7 +161,7 @@ class NestPayProvider extends VirtualPosBase
             [$clientName, $password, $clientId, $orderId, $ipAddress],
             $xmlRequest
         );
-        log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
+        //log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
         $requestData = "DATA=" . $xmlRequest;
 
         // Select status / reconciliation URL based on bank (Ziraat / Halkbank Nestpay)
@@ -182,7 +182,7 @@ class NestPayProvider extends VirtualPosBase
             return PaymentResponse::failed('Geçersiz banka API adresi', null, $orderId);
         }
 
-        log_message('error', 'NestPayProvider checkPaymentStatus url: ' . $url);
+        //log_message('error', 'NestPayProvider checkPaymentStatus url: ' . $url);
 
         // Windows/IIS ortamlarında CA paketi yoksa SSL doğrulama mütabakatı kırar (eski Nestpay::CheckPayment davranışı)
         $verifySsl = filter_var(env('VIRTUALPOS_SSL_VERIFY', 'false'), FILTER_VALIDATE_BOOLEAN);
@@ -224,12 +224,12 @@ class NestPayProvider extends VirtualPosBase
         $executionTime = microtime(true) - $startTime;
         
         // Log raw HTTP response for reconciliation debugging
-        log_message('error', 'NestPayProvider checkPaymentStatus raw HTTP response', [
-            'orderId' => $orderId,
-            'httpCode' => $httpCode,
-            'executionTime' => round($executionTime, 2),
-            'rawBody' => $result,
-        ]);
+        // log_message('error', 'NestPayProvider checkPaymentStatus raw HTTP response', [
+        //     'orderId' => $orderId,
+        //     'httpCode' => $httpCode,
+        //     'executionTime' => round($executionTime, 2),
+        //     'rawBody' => $result,
+        // ]);
         
         // Log slow requests (more than 5 seconds)
         if ($executionTime > 5) {
@@ -251,7 +251,7 @@ class NestPayProvider extends VirtualPosBase
             log_message('error', "Nestpay CheckPayment empty response (OrderID: $orderId)");
             return PaymentResponse::failed('Banka yanÃ„Â±tÃ„Â± boÃ…Å¸', null, $orderId);
         }
-        log_message('error','NestPayProvider checkPaymentStatus result: '.$result);
+        // log_message('error','NestPayProvider checkPaymentStatus result: '.$result);
         try {
             // Suppress XML warnings for invalid characters
             libxml_use_internal_errors(true);
@@ -265,10 +265,10 @@ class NestPayProvider extends VirtualPosBase
             }
             // Convert XML to array
             $responseData = json_decode(json_encode($xml), true);
-            log_message('error', 'NestPayProvider checkPaymentStatus parsed responseData', [
-                'orderId' => $orderId,
-                'responseData' => $responseData,
-            ]);
+            // log_message('error', 'NestPayProvider checkPaymentStatus parsed responseData', [
+            //     'orderId' => $orderId,
+            //     'responseData' => $responseData,
+            // ]);
             
             // Parse response to determine payment status
             // Nestpay / Halkbank response format: CC5Response -> Response, ProcReturnCode, etc.
