@@ -150,7 +150,12 @@ class Get724Provider extends VirtualPosBase
             $response = $this->post($postUrl, $postData, $vakifbankHeaders, ['verify' => false]);
             $rawBody = is_string($response) ? $response : (is_array($response) ? '' : (string) $response);
             if ($rawBody === '' && is_array($response)) {
-                return PaymentResponse::failed('Banka yanıtı boş veya işlenemedi', null, $request->orderId);
+                return PaymentResponse::failed(
+                    'Banka yanıtı boş veya işlenemedi',
+                    null,
+                    $request->orderId,
+                    $response
+                );
             }
             $result = $this->readVakifbankRegisterResult($rawBody);
         } catch (\Throwable $e) {
@@ -350,19 +355,24 @@ class Get724Provider extends VirtualPosBase
             'Accept' => 'application/xml',
         ];
 
+        $rawBody = '';
         try {
             $response = $this->post($postUrl, $postData, $headers, ['verify' => false]);
-            $rawBody = is_string($response) ? $response : (is_array($response) ? '' : (string) $response);
-            if (is_array($response)) {
-                $rawBody = '';
+            if (is_string($response)) {
+                $rawBody = $response;
+            } elseif (is_array($response)) {
+                $rawBody = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+            } else {
+                $rawBody = (string) $response;
             }
+            $rawPayload = ['_raw' => $rawBody];
             if ($rawBody === '') {
-                return PaymentResponse::failed('Banka yanıtı boş', null, $orderId);
+                return PaymentResponse::failed('Banka yanıtı boş', null, $orderId, $rawPayload);
             }
 
             $xml = @simplexml_load_string($rawBody);
             if ($xml === false) {
-                return PaymentResponse::failed('Banka yanıtı işlenemedi', null, $orderId);
+                return PaymentResponse::failed('Banka yanıtı işlenemedi', null, $orderId, $rawPayload);
             }
 
             $rc = (string) ($xml->Rc ?? $xml->rc ?? '');
@@ -376,9 +386,17 @@ class Get724Provider extends VirtualPosBase
             }
 
             $errMsg = $this->getVakifbankErrorDescription($rc, $rawBody);
-            return PaymentResponse::failed($errMsg, $rc, $orderId, json_decode(json_encode($xml), true) ?: []);
+            $failedRaw = json_decode(json_encode($xml), true) ?: [];
+            $failedRaw['_raw'] = $rawBody;
+
+            return PaymentResponse::failed($errMsg, $rc, $orderId, $failedRaw);
         } catch (\Throwable $e) {
-            return PaymentResponse::failed($e->getMessage(), null, $orderId);
+            return PaymentResponse::failed(
+                $e->getMessage(),
+                null,
+                $orderId,
+                $rawBody !== '' ? ['_raw' => $rawBody] : []
+            );
         }
     }
 
