@@ -39,6 +39,22 @@ abstract class VirtualPosBase implements VirtualPosInterface
     }
 
     /**
+     * SSL doğrulama: VIRTUALPOS_SSL_VERIFY (varsayılan false, IIS CA paketi yokluğu).
+     * CURL_CA_BUNDLE dosya yolu verilirse o paket kullanılır.
+     *
+     * @return bool|string
+     */
+    protected function sslVerify(): bool|string
+    {
+        $caBundle = (string) env('CURL_CA_BUNDLE', '');
+        if ($caBundle !== '' && is_file($caBundle)) {
+            return $caBundle;
+        }
+
+        return filter_var(env('VIRTUALPOS_SSL_VERIFY', 'false'), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
      * HTTP POST isteği gönderir
      *
      * @param array $options Opsiyonel: 'verify' => false SSL doğrulamayı kapatır (self-signed sertifika vb.)
@@ -52,7 +68,7 @@ abstract class VirtualPosBase implements VirtualPosInterface
                     'Content-Type' => 'application/x-www-form-urlencoded',
                 ], $headers),
                 'timeout' => $this->config->timeout,
-                'verify' => true,
+                'verify' => $this->sslVerify(),
             ], $options));
 
             $body = $response->getBody();
@@ -65,6 +81,54 @@ abstract class VirtualPosBase implements VirtualPosInterface
             }
             
             return $decoded ?? [];
+        } catch (\Exception $e) {
+            throw new \RuntimeException('HTTP isteği başarısız: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * JSON POST; ham gövde string döner (JSON veya XML ayrıştırması çağırana aittir).
+     */
+    protected function postJson(string $url, array $data, array $headers = [], array $options = []): string
+    {
+        return $this->postRaw($url, array_merge([
+            'json' => $data,
+            'headers' => array_merge([
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ], $headers),
+        ], $options));
+    }
+
+    /**
+     * XML POST; ham gövde string döner.
+     */
+    protected function postXml(string $url, string $xml, array $headers = [], array $options = []): string
+    {
+        return $this->postRaw($url, array_merge([
+            'body' => $xml,
+            'headers' => array_merge([
+                'Content-Type' => 'application/xml; charset=UTF-8',
+                'Accept' => 'application/xml',
+            ], $headers),
+        ], $options));
+    }
+
+    /**
+     * Ham POST gövdesi.
+     */
+    protected function postRaw(string $url, array $curlOptions): string
+    {
+        try {
+            $response = $this->client->request('POST', $url, array_merge([
+                'timeout' => $this->config->timeout,
+                'http_errors' => false,
+                'verify' => $this->sslVerify(),
+            ], $curlOptions));
+
+            $body = $response->getBody();
+
+            return is_string($body) ? $body : (method_exists($body, 'getContents') ? $body->getContents() : (string) $body);
         } catch (\Exception $e) {
             throw new \RuntimeException('HTTP isteği başarısız: ' . $e->getMessage());
         }
@@ -110,17 +174,35 @@ abstract class VirtualPosBase implements VirtualPosInterface
     }
 
     /**
-     * IP adresini alır
+     * Kart hamilinin gerçek IP adresi (X-Forwarded-For ilk hop tercih edilir).
      */
     protected function getClientIp(): string
     {
+        $candidates = [];
         if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-            return $_SERVER['HTTP_CLIENT_IP'];
-        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            return $_SERVER['HTTP_X_FORWARDED_FOR'];
-        } else {
-            return $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+            $candidates[] = trim((string) $_SERVER['HTTP_CLIENT_IP']);
         }
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            foreach (explode(',', (string) $_SERVER['HTTP_X_FORWARDED_FOR']) as $part) {
+                $candidates[] = trim($part);
+            }
+        }
+        if (!empty($_SERVER['REMOTE_ADDR'])) {
+            $candidates[] = trim((string) $_SERVER['REMOTE_ADDR']);
+        }
+
+        foreach ($candidates as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip;
+            }
+        }
+        foreach ($candidates as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+
+        return '127.0.0.1';
     }
 
     /**
