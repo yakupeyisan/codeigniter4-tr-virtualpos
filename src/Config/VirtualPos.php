@@ -145,6 +145,33 @@ class VirtualPos extends BaseConfig
     public int $timeout = 30;
 
     /**
+     * Vakıfbank Güvenli Ortak Ödeme (Common Payment) uç noktaları.
+     * VAKIFBANK_API=apigateway (varsayılan) | cpweb
+     * Mevcut canlı merchant için PaymentSettings.StoreType=cpweb kullanın.
+     */
+    public array $vakifbank = [
+        'api' => 'apigateway',
+        'test' => [
+            'createToken' => 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment/CreateTokenCPY',
+            'getVposTransaction' => 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment/GetVposTransaction',
+            'vposreq' => 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Vposreq',
+            'search' => 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Search',
+            'securePayment' => 'https://guvenliodeme-test.vakifbank.com.tr/CommonPayment/SecurePayment',
+            'registerTransaction' => 'https://cpweb.vakifbank.com.tr/CommonPayment/api/RegisterTransaction',
+            'vposTransaction' => 'https://cpweb.vakifbank.com.tr/CommonPayment/api/VposTransaction',
+        ],
+        'production' => [
+            'createToken' => 'https://inbound.apigateway.vakifbank.com.tr:8443/commonPayment/CreateTokenCPY',
+            'getVposTransaction' => 'https://inbound.apigateway.vakifbank.com.tr:8443/commonPayment/GetVposTransaction',
+            'vposreq' => 'https://inbound.apigateway.vakifbank.com.tr:8443/virtualPos/Vposreq',
+            'search' => 'https://inbound.apigateway.vakifbank.com.tr:8443/virtualPos/Search',
+            'securePayment' => 'https://guvenliodeme.vakifbank.com.tr/CommonPayment/SecurePayment',
+            'registerTransaction' => 'https://cpweb.vakifbank.com.tr/CommonPayment/api/RegisterTransaction',
+            'vposTransaction' => 'https://cpweb.vakifbank.com.tr/CommonPayment/api/VposTransaction',
+        ],
+    ];
+
+    /**
      * Constructor - .env dosyasından değerleri yükler
      */
     public function __construct()
@@ -154,6 +181,17 @@ class VirtualPos extends BaseConfig
         // Provider
         $this->provider = env('VIRTUALPOS_PROVIDER', $this->provider);
         $this->testMode = env('VIRTUALPOS_TEST_MODE', $this->testMode);
+        $this->vakifbank['api'] = env('VAKIFBANK_API', $this->vakifbank['api']);
+        foreach (['test', 'production'] as $envName) {
+            $prefix = $envName === 'test' ? 'VAKIFBANK_TEST_' : 'VAKIFBANK_PROD_';
+            foreach (array_keys($this->vakifbank[$envName]) as $key) {
+                $envKey = $prefix . strtoupper(preg_replace('/([a-z])([A-Z])/', '$1_$2', $key));
+                $override = env($envKey);
+                if (is_string($override) && $override !== '') {
+                    $this->vakifbank[$envName][$key] = $override;
+                }
+            }
+        }
 
         // NestPay - Default account
         if (isset($this->nestpay['accounts']['default'])) {
