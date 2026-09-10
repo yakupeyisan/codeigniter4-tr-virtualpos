@@ -161,7 +161,7 @@ class NestPayProvider extends VirtualPosBase
             [$clientName, $password, $clientId, $orderId, $ipAddress],
             $xmlRequest
         );
-        log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
+        log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.preg_replace('#<Password>.*?</Password>#s', '<Password>***</Password>', $xmlRequest));
         $requestData = "DATA=" . $xmlRequest;
 
         $url = $this->nestPayApiUrl($config);
@@ -268,24 +268,30 @@ class NestPayProvider extends VirtualPosBase
             $procReturnCode = $responseData['ProcReturnCode'] ?? '';
             $transId = $responseData['TransId'] ?? '';
             $orderStatus = $responseData['Extra']['ORDERSTATUS'] ?? '';
-            $chargeTypeCd = $responseData['Extra']['CHARGE_TYPE_CD'] ?? '';
+            $chargeTypeCd = strtoupper((string) ($responseData['Extra']['CHARGE_TYPE_CD'] ?? ''));
+            $transStat = strtoupper((string) ($responseData['Extra']['TRANS_STAT'] ?? ''));
+            if ($transStat === '' && is_string($orderStatus) && preg_match('/TRANS_STAT:([A-Z])/i', $orderStatus, $m)) {
+                $transStat = strtoupper($m[1]);
+            }
+
+            // Void (V) / iade (CHARGE_TYPE C): kayıt bulunur ama satış artık geçerli değil.
+            if ($transStat === 'V' || $chargeTypeCd === 'C') {
+                return PaymentResponse::cancelled(
+                    $orderId,
+                    $transStat === 'V' ? 'Ödeme iptal edilmiş (Void)' : 'Ödeme iade edilmiş',
+                    $responseData,
+                    (string) ($transId ?: $orderId)
+                );
+            }
             
             // Check if payment is successful
             // Old system: only Response == Approved AND ProcReturnCode == 00 kontrol ediliyordu.
-            // CHARGE_TYPE_CD varsa S => baÃ…Å¸arÃ„Â±lÃ„Â±, C => baÃ…Å¸arÃ„Â±sÃ„Â±z olarak ele al.
+            // CHARGE_TYPE_CD varsa S => başarılı. TRANS_STAT C = captured (iptal V değil).
             if ($response === 'Approved' && $procReturnCode === '00' && ($chargeTypeCd === '' || $chargeTypeCd === 'S')) {
                 return PaymentResponse::success(
                     $transId ?: $orderId,
                     $orderId,
-                    'Ãƒâ€“deme durumu: OnaylandÃ„Â±',
-                    $responseData
-                );
-            }
-            if ($response === 'Approved' && $procReturnCode === '00' && $chargeTypeCd === 'C') {
-                return PaymentResponse::failed(
-                    'Ãƒâ€“deme durumu: Reddedildi',
-                    $procReturnCode,
-                    $orderId,
+                    'Ödeme durumu: Onaylandı',
                     $responseData
                 );
             }
