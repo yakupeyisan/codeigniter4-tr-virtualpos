@@ -55,6 +55,21 @@ class PaymentResponse
         return $response;
     }
 
+    public static function cancelled(
+        string $orderId,
+        ?string $message = null,
+        array|string $rawData = [],
+        ?string $transactionId = null
+    ): self {
+        $response = new self(false, 'cancelled');
+        $response->orderId = $orderId;
+        $response->transactionId = $transactionId;
+        $response->message = $message ?? 'Ödeme iptal edilmiş';
+        $response->errorMessage = $response->message;
+        $response->rawData = self::normalizeRawData($rawData);
+        return $response;
+    }
+
     /**
      * @param array<string, mixed>|string $rawData
      * @return array<string, mixed>
