@@ -164,19 +164,11 @@ class NestPayProvider extends VirtualPosBase
         //log_message('error','NestPayProvider checkPaymentStatus xmlRequest: '.$xmlRequest);
         $requestData = "DATA=" . $xmlRequest;
 
-        // Select status / reconciliation URL based on bank (Ziraat / Halkbank Nestpay)
-        $bank = strtolower($config['bank'] ?? 'isbank');
-        if ($bank === 'halkbank') {
-            // Old system Halkbank status URL
-            $url = 'https://sanalpos.halkbank.com.tr/fim/api';
-        } else {
-            // Default to Ziraat Nestpay status URL (old system compatible)
-            $url = 'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer';
-        }
-
+        $url = $this->nestPayApiUrl($config);
         $allowedUrls = [
             'https://sanalpos.halkbank.com.tr/fim/api',
             'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer',
+            'https://entegrasyon.asseco-see.com.tr/fim/api',
         ];
         if (! in_array($url, $allowedUrls, true)) {
             return PaymentResponse::failed('Geçersiz banka API adresi', null, $orderId);
@@ -276,24 +268,30 @@ class NestPayProvider extends VirtualPosBase
             $procReturnCode = $responseData['ProcReturnCode'] ?? '';
             $transId = $responseData['TransId'] ?? '';
             $orderStatus = $responseData['Extra']['ORDERSTATUS'] ?? '';
-            $chargeTypeCd = $responseData['Extra']['CHARGE_TYPE_CD'] ?? '';
+            $chargeTypeCd = strtoupper((string) ($responseData['Extra']['CHARGE_TYPE_CD'] ?? ''));
+            $transStat = strtoupper((string) ($responseData['Extra']['TRANS_STAT'] ?? ''));
+            if ($transStat === '' && is_string($orderStatus) && preg_match('/TRANS_STAT:([A-Z])/i', $orderStatus, $m)) {
+                $transStat = strtoupper($m[1]);
+            }
+
+            // Void (V) / iade (CHARGE_TYPE C): kayıt bulunur ama satış artık geçerli değil.
+            if ($transStat === 'V' || $chargeTypeCd === 'C') {
+                return PaymentResponse::cancelled(
+                    $orderId,
+                    $transStat === 'V' ? 'Ödeme iptal edilmiş (Void)' : 'Ödeme iade edilmiş',
+                    $responseData,
+                    (string) ($transId ?: $orderId)
+                );
+            }
             
             // Check if payment is successful
             // Old system: only Response == Approved AND ProcReturnCode == 00 kontrol ediliyordu.
-            // CHARGE_TYPE_CD varsa S => baÃ…Å¸arÃ„Â±lÃ„Â±, C => baÃ…Å¸arÃ„Â±sÃ„Â±z olarak ele al.
+            // CHARGE_TYPE_CD varsa S => başarılı. TRANS_STAT C = captured (iptal V değil).
             if ($response === 'Approved' && $procReturnCode === '00' && ($chargeTypeCd === '' || $chargeTypeCd === 'S')) {
                 return PaymentResponse::success(
                     $transId ?: $orderId,
                     $orderId,
-                    'Ãƒâ€“deme durumu: OnaylandÃ„Â±',
-                    $responseData
-                );
-            }
-            if ($response === 'Approved' && $procReturnCode === '00' && $chargeTypeCd === 'C') {
-                return PaymentResponse::failed(
-                    'Ãƒâ€“deme durumu: Reddedildi',
-                    $procReturnCode,
-                    $orderId,
+                    'Ödeme durumu: Onaylandı',
                     $responseData
                 );
             }
@@ -319,83 +317,12 @@ class NestPayProvider extends VirtualPosBase
 
     public function cancel(string $orderId, ?float $amount = null): PaymentResponse
     {
-        $config = $this->getAccountConfig();
-        $url = $this->isTestMode() ? 
-            'https://entegrasyon.asseco-see.com.tr/fim/api' : 
-            'https://www.muze.com.tr/fim/api';
-
-        $data = [
-            'Name' => $config['clientId'],
-            'Password' => $config['storeKey'],
-            'ClientId' => $config['clientId'],
-            'OrderId' => $orderId,
-            'Type' => 'Void',
-        ];
-
-        try {
-            $response = $this->post($url, $data);
-            
-            if (isset($response['Response']) && $response['Response'] === 'Approved') {
-                return PaymentResponse::success(
-                    $response['TransId'] ?? $orderId,
-                    $orderId,
-                    'Ã„Â°ptal iÃ…Å¸lemi baÃ…Å¸arÃ„Â±lÃ„Â±',
-                    $response
-                );
-            }
-
-            return PaymentResponse::failed(
-                $response['ErrMsg'] ?? 'Ã„Â°ptal iÃ…Å¸lemi baÃ…Å¸arÃ„Â±sÃ„Â±z',
-                $response['ProcReturnCode'] ?? null,
-                $orderId,
-                $response
-            );
-        } catch (\Exception $e) {
-            return PaymentResponse::failed($e->getMessage(), null, $orderId);
-        }
+        return $this->sendCc5Transaction($orderId, 'Void', $amount);
     }
 
     public function refund(string $orderId, float $amount, ?string $transactionId = null): PaymentResponse
     {
-        $config = $this->getAccountConfig();
-        $url = $this->isTestMode() ? 
-            'https://entegrasyon.asseco-see.com.tr/fim/api' : 
-            'https://www.muze.com.tr/fim/api';
-
-        $data = [
-            'Name' => $config['clientId'],
-            'Password' => $config['storeKey'],
-            'ClientId' => $config['clientId'],
-            'OrderId' => $orderId,
-            'Type' => 'Credit',
-            'Total' => $this->formatAmount($amount),
-        ];
-
-        if ($transactionId) {
-            $data['TransId'] = $transactionId;
-        }
-
-        try {
-            $response = $this->post($url, $data);
-            
-            if (isset($response['Response']) && $response['Response'] === 'Approved') {
-                return PaymentResponse::success(
-                    $response['TransId'] ?? $orderId,
-                    $orderId,
-                    'Ã„Â°ade iÃ…Å¸lemi baÃ…Å¸arÃ„Â±lÃ„Â±',
-                    $response
-                );
-            }
-
-            return PaymentResponse::failed(
-                $response['ErrMsg'] ?? 'Ã„Â°ade iÃ…Å¸lemi baÃ…Å¸arÃ„Â±sÃ„Â±z',
-                $response['ProcReturnCode'] ?? null,
-                $orderId,
-                $response
-            );
-        } catch (\Exception $e) {
-            return PaymentResponse::failed($e->getMessage(), null, $orderId);
-        }
+        return $this->sendCc5Transaction($orderId, 'Credit', $amount, $transactionId);
     }
 
     public function handleCallback(array $data): PaymentResponse
@@ -486,6 +413,116 @@ class NestPayProvider extends VirtualPosBase
         $form .= '</form>';
         $form .= '<script>document.getElementById("nestpay_form").submit();</script>';
         return $form;
+    }
+
+    private function nestPayApiUrl(array $config): string
+    {
+        if ($this->isTestMode()) {
+            return 'https://entegrasyon.asseco-see.com.tr/fim/api';
+        }
+        $bank = strtolower((string) ($config['bank'] ?? 'ziraat'));
+        if ($bank === 'halkbank') {
+            return 'https://sanalpos.halkbank.com.tr/fim/api';
+        }
+
+        return 'https://sanalpos2.ziraatbank.com.tr/servlet/cc5ApiServer';
+    }
+
+    /**
+     * NestPay CC5 Void / Credit (aynı endpoint ve kimlik bilgisi mütabakat ile).
+     */
+    private function sendCc5Transaction(
+        string $orderId,
+        string $type,
+        ?float $amount = null,
+        ?string $transactionId = null
+    ): PaymentResponse {
+        $config = $this->getAccountConfig();
+        $url = $this->nestPayApiUrl($config);
+        $clientName = (string) ($config['clientName'] ?? '');
+        $password = (string) ($config['password'] ?? ($config['storeKey'] ?? ''));
+        $clientId = (string) ($config['clientId'] ?? '');
+
+        $xml = '<?xml version="1.0" encoding="ISO-8859-9"?>'
+            . '<CC5Request>'
+            . '<Name>' . $this->xmlEscape($clientName) . '</Name>'
+            . '<Password>' . $this->xmlEscape($password) . '</Password>'
+            . '<ClientId>' . $this->xmlEscape($clientId) . '</ClientId>'
+            . '<Type>' . $this->xmlEscape($type) . '</Type>'
+            . '<OrderId>' . $this->xmlEscape($orderId) . '</OrderId>'
+            . '<Mode>P</Mode>';
+        if ($type === 'Credit' && $amount !== null) {
+            $xml .= '<Total>' . $this->xmlEscape($this->formatAmount($amount)) . '</Total>';
+        }
+        if ($transactionId !== null && $transactionId !== '' && $transactionId !== $orderId) {
+            $xml .= '<TransId>' . $this->xmlEscape($transactionId) . '</TransId>';
+        }
+        $xml .= '</CC5Request>';
+
+        $requestData = 'DATA=' . $xml;
+        log_message('error', 'NestPayProvider CC5 ' . $type . ' url=' . $url . ' orderId=' . $orderId);
+
+        $verifySsl = $this->sslVerify();
+        try {
+            $httpResponse = \Config\Services::curlrequest()->post($url, [
+                'body' => $requestData,
+                'headers' => [
+                    'Content-Type' => 'application/x-www-form-urlencoded',
+                    'Connection' => 'keep-alive',
+                    'Cache-Control' => 'no-cache',
+                ],
+                'http_errors' => false,
+                'verify' => $verifySsl,
+                'timeout' => 30,
+                'connect_timeout' => 10,
+            ]);
+            $result = (string) $httpResponse->getBody();
+            $httpCode = $httpResponse->getStatusCode();
+        } catch (\Throwable $e) {
+            return PaymentResponse::failed('Banka API hatası: ' . $e->getMessage(), null, $orderId);
+        }
+
+        if ($httpCode !== 200 || trim($result) === '') {
+            return PaymentResponse::failed(
+                'Banka API HTTP hatası: ' . $httpCode,
+                (string) $httpCode,
+                $orderId,
+                ['_raw' => $result]
+            );
+        }
+
+        libxml_use_internal_errors(true);
+        $xmlObj = simplexml_load_string($result);
+        if ($xmlObj === false) {
+            libxml_clear_errors();
+            return PaymentResponse::failed('Banka yanıtı parse edilemedi', null, $orderId, ['_raw' => $result]);
+        }
+        $responseData = json_decode(json_encode($xmlObj), true);
+        if (! is_array($responseData)) {
+            return PaymentResponse::failed('Banka yanıtı işlenemedi', null, $orderId, ['_raw' => $result]);
+        }
+
+        $ok = (($responseData['Response'] ?? '') === 'Approved')
+            && ((string) ($responseData['ProcReturnCode'] ?? '') === '00');
+        $transId = (string) ($responseData['TransId'] ?? $orderId);
+        $errCode = isset($responseData['ProcReturnCode']) ? (string) $responseData['ProcReturnCode'] : null;
+        if ($ok) {
+            $msg = $type === 'Credit' ? 'İade işlemi başarılı' : 'İptal işlemi başarılı';
+
+            return PaymentResponse::success($transId, $orderId, $msg, $responseData);
+        }
+
+        $errMsg = trim((string) ($responseData['ErrMsg'] ?? ''));
+        if ($errMsg === '') {
+            $errMsg = $type === 'Credit' ? 'İade işlemi başarısız' : 'İptal işlemi başarısız';
+        }
+
+        return PaymentResponse::failed($errMsg, $errCode, $orderId, $responseData);
+    }
+
+    private function xmlEscape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 }
 

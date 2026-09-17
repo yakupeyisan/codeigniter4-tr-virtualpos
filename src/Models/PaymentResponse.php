@@ -31,13 +31,13 @@ class PaymentResponse
         string $transactionId,
         string $orderId,
         ?string $message = null,
-        array $rawData = []
+        array|string $rawData = []
     ): self {
         $response = new self(true, 'success');
         $response->transactionId = $transactionId;
         $response->orderId = $orderId;
         $response->message = $message ?? 'Ödeme başarılı';
-        $response->rawData = $rawData;
+        $response->rawData = self::normalizeRawData($rawData);
         return $response;
     }
 
@@ -45,14 +45,42 @@ class PaymentResponse
         string $errorMessage,
         ?string $errorCode = null,
         ?string $orderId = null,
-        array $rawData = []
+        array|string $rawData = []
     ): self {
         $response = new self(false, 'failed');
         $response->errorMessage = $errorMessage;
         $response->errorCode = $errorCode;
         $response->orderId = $orderId;
-        $response->rawData = $rawData;
+        $response->rawData = self::normalizeRawData($rawData);
         return $response;
+    }
+
+    public static function cancelled(
+        string $orderId,
+        ?string $message = null,
+        array|string $rawData = [],
+        ?string $transactionId = null
+    ): self {
+        $response = new self(false, 'cancelled');
+        $response->orderId = $orderId;
+        $response->transactionId = $transactionId;
+        $response->message = $message ?? 'Ödeme iptal edilmiş';
+        $response->errorMessage = $response->message;
+        $response->rawData = self::normalizeRawData($rawData);
+        return $response;
+    }
+
+    /**
+     * @param array<string, mixed>|string $rawData
+     * @return array<string, mixed>
+     */
+    private static function normalizeRawData(array|string $rawData): array
+    {
+        if (is_array($rawData)) {
+            return $rawData;
+        }
+
+        return $rawData === '' ? [] : ['_raw' => $rawData];
     }
 
     public static function pending(
